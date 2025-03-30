@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./StakeholderRegistry.sol";
 
 /**
  * @title DisputeManager
@@ -17,10 +18,15 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *     * Challenger receives: depositChallenger + (depositRespondent / 2)
  *     * The remaining half of respondent's deposit is distributed equally among voters who voted for the challenger.
  *
- * The contract uses a fixed deposit amount and a fixed voting period.
+ * In addition, challenges are disallowed if the respondent is a consumer.
  */
 contract DisputeManager is Ownable {
-    constructor() Ownable(msg.sender) {}
+    // Set owner on deployment.
+    constructor(address registryAddress) Ownable(msg.sender) {
+        registry = StakeholderRegistry(registryAddress);
+    }
+
+    StakeholderRegistry public registry;
     uint public constant DEPOSIT_AMOUNT = 1 ether;
     uint public constant VOTING_PERIOD = 1 days;
     
@@ -31,9 +37,9 @@ contract DisputeManager is Ownable {
     
     struct Dispute {
         uint disputeId;
-        uint ratingId;         // external identifier for the rating (optional)
-        address challenger;    // actor B who initiates the dispute
-        address respondent;    // actor A who is being challenged
+        uint ratingId;         // External identifier for the rating (optional)
+        address challenger;    // Actor B who initiates the dispute
+        address respondent;    // Actor A who is being challenged
         uint depositChallenger;
         uint depositRespondent;
         uint votingDeadline;
@@ -41,17 +47,13 @@ contract DisputeManager is Ownable {
         DisputeOutcome outcome;
         uint votesForRespondent;
         uint votesForChallenger;
-        address[] voters;      // list of addresses that voted
+        address[] voters;      // List of addresses that voted
         bool finalized;
-        bool exists;           // flag to indicate that the dispute exists
+        bool exists;           // Flag to indicate that the dispute exists
     }
     
-    // Mapping from dispute id to dispute details.
     mapping(uint => Dispute) public disputes;
-    // Track whether a given address has voted on a dispute.
     mapping(uint => mapping(address => bool)) public hasVoted;
-    // Record the vote choice for each voter in a dispute:
-    // true = vote for respondent, false = vote for challenger.
     mapping(uint => mapping(address => bool)) public disputeVoteChoice;
     
     event DisputeInitiated(uint disputeId, uint ratingId, address indexed challenger, address indexed respondent);
@@ -67,10 +69,13 @@ contract DisputeManager is Ownable {
      *
      * Requirements:
      * - The challenger must send exactly DEPOSIT_AMOUNT.
+     * - The respondent's role must NOT be Consumer.
      */
     function initiateDispute(uint _ratingId, address _respondent) external payable returns (uint) {
         require(msg.value == DEPOSIT_AMOUNT, "Challenger deposit must be equal to DEPOSIT_AMOUNT");
         require(_respondent != address(0), "Invalid respondent address");
+        // Check via StakeholderRegistry: challenges not allowed if the respondent is a Consumer.
+        require(registry.getRole(_respondent) != StakeholderRegistry.Role.Consumer, "Challenging not allowed if rater is a consumer");
 
         disputeCounter++;
         uint disputeId = disputeCounter;
@@ -171,9 +176,6 @@ contract DisputeManager is Ownable {
         }
     }
     
-    /**
-     * @dev Internal helper to finalize dispute when respondent wins.
-     */
     function _finalizeRespondentWins(uint _disputeId) internal {
         uint amountForRespondent = disputes[_disputeId].depositRespondent + (disputes[_disputeId].depositChallenger / 2);
         uint rewardPool = disputes[_disputeId].depositChallenger / 2;
@@ -195,9 +197,6 @@ contract DisputeManager is Ownable {
         }
     }
     
-    /**
-     * @dev Internal helper to finalize dispute when challenger wins.
-     */
     function _finalizeChallengerWins(uint _disputeId) internal {
         uint amountForChallenger = disputes[_disputeId].depositChallenger + (disputes[_disputeId].depositRespondent / 2);
         uint rewardPool = disputes[_disputeId].depositRespondent / 2;
@@ -219,9 +218,6 @@ contract DisputeManager is Ownable {
         }
     }
     
-    /**
-     * @notice Returns the dispute details.
-     */
     function getDisputeDetails(uint _disputeId) external view returns (
         uint disputeId,
         uint ratingId,
@@ -256,6 +252,5 @@ contract DisputeManager is Ownable {
         );
     }
     
-    // Allow the contract to receive ETH.
     receive() external payable {}
 }

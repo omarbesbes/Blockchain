@@ -3,7 +3,6 @@ const { ethers } = require("hardhat");
 
 // Helper function to decode event arguments from receipt.logs.
 function getEventArgs(receipt, eventName, iface) {
-  // Loop over all logs and try to parse them.
   for (let i = 0; i < receipt.logs.length; i++) {
     try {
       const parsedLog = iface.parseLog(receipt.logs[i]);
@@ -11,28 +10,48 @@ function getEventArgs(receipt, eventName, iface) {
         return parsedLog.args;
       }
     } catch (e) {
-      // If parsing fails, skip this log.
+      // Skip logs that don't match.
     }
   }
   return null;
 }
 
 describe("DisputeManager", function () {
+  let StakeholderRegistry, registry;
   let DisputeManager, disputeManager;
-  let owner, actorA, actorB, voter1, voter2, voter3;
-  // ethers.parseEther is used in ethers v6; for ethers v5 use ethers.utils.parseEther.
+  let owner, actorA, actorB, consumer, voter1, voter2, voter3;
+  // Define a local constant for enum Role.
+  const Role = { None: 0, Supplier: 1, Factory: 2, Distributor: 3, Retailer: 4, Consumer: 5 };
   const DEPOSIT_AMOUNT = ethers.parseEther("1");
 
   beforeEach(async function () {
-    [owner, actorA, actorB, voter1, voter2, voter3, ...addrs] = await ethers.getSigners();
-    // In our scenario: actorA is the respondent and actorB is the challenger.
+    [owner, actorA, actorB, consumer, voter1, voter2, voter3, ...addrs] = await ethers.getSigners();
+
+    // Deploy StakeholderRegistry and register actors.
+    StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
+    registry = await StakeholderRegistry.deploy();
+    await registry.waitForDeployment();
+
+    // Register actorA as Factory (non-consumer) so challenge is allowed.
+    await registry.connect(actorA).registerStakeholder(Role.Factory, "ipfs://actorA");
+    // Register actorB as Distributor.
+    await registry.connect(actorB).registerStakeholder(Role.Distributor, "ipfs://actorB");
+    // Register consumer as Consumer.
+    await registry.connect(consumer).registerStakeholder(Role.Consumer, "ipfs://consumer");
+    // Register voters.
+    await registry.connect(voter1).registerStakeholder(Role.Distributor, "ipfs://voter1");
+    await registry.connect(voter2).registerStakeholder(Role.Distributor, "ipfs://voter2");
+    await registry.connect(voter3).registerStakeholder(Role.Distributor, "ipfs://voter3");
+
+    // Deploy DisputeManager with the registry's address.
     DisputeManager = await ethers.getContractFactory("DisputeManager");
-    disputeManager = await DisputeManager.deploy();
+    disputeManager = await DisputeManager.deploy(await registry.getAddress());
     await disputeManager.waitForDeployment();
   });
 
   describe("initiateDispute", function () {
-    it("should allow a challenger to initiate a dispute with correct deposit", async function () {
+    it("should allow a challenger to initiate a dispute with correct deposit when respondent is not consumer", async function () {
+      // actorB challenges actorA (Factory) - allowed.
       const tx = await disputeManager.connect(actorB).initiateDispute(123, actorA.address, { value: DEPOSIT_AMOUNT });
       const receipt = await tx.wait();
       // Use helper to get event arguments.
@@ -49,10 +68,18 @@ describe("DisputeManager", function () {
         disputeManager.connect(actorB).initiateDispute(123, actorA.address, { value: ethers.parseEther("0.5") })
       ).to.be.revertedWith("Challenger deposit must be equal to DEPOSIT_AMOUNT");
     });
+
+    it("should revert if respondent is a consumer", async function () {
+      // consumer is registered as Consumer.
+      await expect(
+        disputeManager.connect(actorB).initiateDispute(456, consumer.address, { value: DEPOSIT_AMOUNT })
+      ).to.be.revertedWith("Challenging not allowed if rater is a consumer");
+    });
   });
 
   describe("respondToDispute", function () {
     beforeEach(async function () {
+      // Initiate dispute: actorB challenges actorA.
       await disputeManager.connect(actorB).initiateDispute(456, actorA.address, { value: DEPOSIT_AMOUNT });
     });
 
@@ -77,6 +104,7 @@ describe("DisputeManager", function () {
 
   describe("voteDispute", function () {
     beforeEach(async function () {
+      // Initiate dispute and have actorA respond.
       await disputeManager.connect(actorB).initiateDispute(789, actorA.address, { value: DEPOSIT_AMOUNT });
       await disputeManager.connect(actorA).respondToDispute(1, { value: DEPOSIT_AMOUNT });
     });
@@ -99,7 +127,7 @@ describe("DisputeManager", function () {
 
   describe("finalizeDispute", function () {
     beforeEach(async function () {
-      // Initiate dispute and respond.
+      // Initiate dispute and have actorA respond.
       await disputeManager.connect(actorB).initiateDispute(101, actorA.address, { value: DEPOSIT_AMOUNT });
       await disputeManager.connect(actorA).respondToDispute(1, { value: DEPOSIT_AMOUNT });
     });
