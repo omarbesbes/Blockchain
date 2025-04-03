@@ -218,8 +218,6 @@ describe("ScoreEngine", function () {
     it("updates confidence score correctly when votes disagree", async function () {
       // Ensure factory's confidence is initialized by rating.
       await scoreEngine.connect(factory).rateStakeholder(await supplier.getAddress(), ScoreType.TRUST, 8);
-      console.log( await registry.getRole(factory))
-      console.log( await registry.getRole(supplier))
       let initialConfidence = await scoreEngine.confidenceScores(factory.getAddress());
       expect(initialConfidence).to.equal(100);
       
