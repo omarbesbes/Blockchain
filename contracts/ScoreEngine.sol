@@ -21,7 +21,9 @@ contract ScoreEngine is Ownable {
     DisputeManager private disputeManager;
 
     // Constant base alpha, expressed as an integer percentage (e.g., 10 means 10%)
-    uint256 public constant BASE_ALPHA = 10;
+    uint256 public constant BASE_ALPHA = 1;
+    // Precision constant for fixed-point arithmetic
+    uint256 public constant PRECISION = 1e18;
 
     /**
      * @dev Enum of all possible score types, consolidated from your table:
@@ -54,7 +56,7 @@ contract ScoreEngine is Ownable {
      */
     struct Score {
         ScoreType scoreType;
-        uint8 value;        // e.g., 1 to 10
+        uint256 value;        // Updated from uint8 to uint256 for higher precision (fixed-point)
         address rater;
         uint256 timestamp;
     }
@@ -76,7 +78,7 @@ contract ScoreEngine is Ownable {
     uint256 private scoreIdCounter;
     struct ScoreRecord {
         ScoreType scoreType;
-        uint8 value;
+        uint256 value;       // Updated from uint8 to uint256 for higher precision
         address rater;
         uint256 timestamp;
     }
@@ -88,7 +90,7 @@ contract ScoreEngine is Ownable {
         address indexed rater,
         address indexed rated,
         ScoreType scoreType,
-        uint8 value,
+        uint256 value,       // Updated from uint8 to uint256
         uint256 timestamp,
         uint256 scoreId
     );
@@ -111,74 +113,74 @@ contract ScoreEngine is Ownable {
      * @param _value A numeric value for the score (e.g., 1 to 10).
      */
     function rateStakeholder(
-    address _rated,
-    ScoreType _scoreType,
-    uint8 _value
-) external {
-    require(_value > 0 && _value <= 10, "Score value must be between 1 and 10");
-    require(registry.isRegistered(_rated), "Rated stakeholder not registered");
+        address _rated,
+        ScoreType _scoreType,
+        uint8 _value
+    ) external {
+        require(_value > 0 && _value <= 10, "Score value must be between 1 and 10");
+        require(registry.isRegistered(_rated), "Rated stakeholder not registered");
 
-    // Identify roles of rater and rated.
-    StakeholderRegistry.Role raterRole = registry.getRole(msg.sender);
-    StakeholderRegistry.Role ratedRole = registry.getRole(_rated);
+        // Identify roles of rater and rated.
+        StakeholderRegistry.Role raterRole = registry.getRole(msg.sender);
+        StakeholderRegistry.Role ratedRole = registry.getRole(_rated);
 
-    require(raterRole != StakeholderRegistry.Role.None, "Rater not valid");
-    require(ratedRole != StakeholderRegistry.Role.None, "Rated not valid");
-    require(
-        canRate(raterRole, ratedRole, _scoreType),
-        "Invalid role or score type for this rating"
-    );
+        require(raterRole != StakeholderRegistry.Role.None, "Rater not valid");
+        require(ratedRole != StakeholderRegistry.Role.None, "Rated not valid");
+        require(
+            canRate(raterRole, ratedRole, _scoreType),
+            "Invalid role or score type for this rating"
+        );
 
-    // Compute the new exponential moving average (EMA) for this score type.
-    uint256 newEMA;
-    if (scoreCountsByType[_rated][_scoreType] == 0) {
-        // First rating: set EMA to the raw value.
-        if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
-            if (confidenceScores[msg.sender] == 0) {
-                confidenceScores[msg.sender] = 100;
-            }}
-        newEMA = _value;
-    } else {
-        uint effectiveAlpha;
-        // For Factories or Retailers, adjust the base alpha by the rater's confidence.
-        if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
-            if (confidenceScores[msg.sender] == 0) {
-                confidenceScores[msg.sender] = 100;
+        // Compute the new exponential moving average (EMA) for this score type.
+        uint256 newEMA;
+        if (scoreCountsByType[_rated][_scoreType] == 0) {
+            // First rating: set EMA to the raw value scaled by PRECISION.
+            if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
+                if (confidenceScores[msg.sender] == 0) {
+                    confidenceScores[msg.sender] = 100;
+                }
             }
-            effectiveAlpha = (BASE_ALPHA * confidenceScores[msg.sender]) / 100;
+            newEMA = uint256(_value) * PRECISION;
         } else {
-            effectiveAlpha = BASE_ALPHA;
+            uint effectiveAlpha;
+            // For Factories or Retailers, adjust the base alpha by the rater's confidence.
+            if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
+                if (confidenceScores[msg.sender] == 0) {
+                    confidenceScores[msg.sender] = 100;
+                }
+                effectiveAlpha = (BASE_ALPHA * confidenceScores[msg.sender]) / 100;
+            } else {
+                effectiveAlpha = BASE_ALPHA;
+            }
+            // newEMA = (effectiveAlpha * (newValue * PRECISION) + (100 - effectiveAlpha) * oldEMA) / 100.
+            newEMA = (effectiveAlpha * (uint256(_value) * PRECISION) + (100 - effectiveAlpha) * globalScoresByType[_rated][_scoreType]) / 100;
         }
-        // newEMA = (effectiveAlpha * newValue + (100 - effectiveAlpha) * oldEMA) / 100.
-        newEMA = (effectiveAlpha * _value + (100 - effectiveAlpha) * globalScoresByType[_rated][_scoreType]) / 100;
+        // Update the EMA and count for this score type.
+        globalScoresByType[_rated][_scoreType] = newEMA;
+        scoreCountsByType[_rated][_scoreType]++;
+
+        // Instead of pushing the raw _value, create a new Score record using the computed newEMA.
+        Score memory newScore = Score({
+            scoreType: _scoreType,
+            value: newEMA,
+            rater: msg.sender,
+            timestamp: block.timestamp
+        });
+        stakeholderScores[_rated].push(newScore);
+
+        // Also update the score history mapping.
+        scoreIdCounter++;
+        uint256 newScoreId = scoreIdCounter;
+        scoreHistory[newScoreId] = ScoreRecord({
+            scoreType: _scoreType,
+            value: newEMA,
+            rater: msg.sender,
+            timestamp: block.timestamp
+        });
+        stakeholderScoreIds[_rated].push(newScoreId);
+
+        emit ScoreAssigned(msg.sender, _rated, _scoreType, newEMA, block.timestamp, newScoreId);
     }
-    // Update the EMA and count for this score type.
-    globalScoresByType[_rated][_scoreType] = newEMA;
-    scoreCountsByType[_rated][_scoreType]++;
-
-    // Instead of pushing the raw _value, create a new Score record using the computed newEMA.
-    Score memory newScore = Score({
-        scoreType: _scoreType,
-        value: uint8(newEMA),  // newEMA is stored as the updated moving average.
-        rater: msg.sender,
-        timestamp: block.timestamp
-    });
-    stakeholderScores[_rated].push(newScore);
-
-    // Also update the score history mapping.
-    scoreIdCounter++;
-    uint256 newScoreId = scoreIdCounter;
-    scoreHistory[newScoreId] = ScoreRecord({
-        scoreType: _scoreType,
-        value: uint8(newEMA),
-        rater: msg.sender,
-        timestamp: block.timestamp
-    });
-    stakeholderScoreIds[_rated].push(newScoreId);
-
-    emit ScoreAssigned(msg.sender, _rated, _scoreType, uint8(newEMA), block.timestamp, newScoreId);
-}
-
 
     /**
      * @dev After a dispute is finalized, call this function to update the rater's
@@ -192,7 +194,6 @@ contract ScoreEngine is Ownable {
     function updateConfidenceAfterDispute(
         DisputeManager.Dispute memory _dispute
     ) external onlyOwner {
-   
         address rater = _dispute.respondent;
         // Check that the rater is a Factory or Retailer.
         StakeholderRegistry.Role role = registry.getRole(rater);
@@ -274,6 +275,7 @@ contract ScoreEngine is Ownable {
         }
         // Factory (scored by Consumer) => PRODUCT_QUALITY, WARRANTY, ECO_RATING.
         if (ratedRole == StakeholderRegistry.Role.Factory && raterRole == StakeholderRegistry.Role.Consumer) {
+            // handle returning of small reward for article review that was included in the initial price of the device
             return (
                 scoreType == ScoreType.PRODUCT_QUALITY ||
                 scoreType == ScoreType.WARRANTY ||

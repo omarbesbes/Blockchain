@@ -32,6 +32,9 @@ describe("ScoreEngine", function () {
     RETURN_POLICY: 11,
   };
 
+  // Precision constant as defined in the contract (1e18)
+  const PRECISION = ethers.parseUnits("1", 18);
+
   // Helper function to parse the ScoreAssigned event from transaction logs.
   async function getScoreAssignedEvent(tx) {
     const receipt = await tx.wait();
@@ -85,87 +88,95 @@ describe("ScoreEngine", function () {
       const supplierAddr = await supplier.getAddress();
       const factoryAddr = await factory.getAddress();
 
-      // First rating: value 8 should set EMA = 8.
+      // First rating: value 8 should set EMA = 8 * PRECISION.
       const tx1 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 8);
       const event1 = await getScoreAssignedEvent(tx1);
       expect(event1.args.rater).to.equal(factoryAddr);
       expect(event1.args.rated).to.equal(supplierAddr);
       expect(event1.args.scoreType).to.equal(ScoreType.TRUST);
-      expect(event1.args.value).to.equal(8);
+      expect(event1.args.value).to.equal(ethers.parseUnits("8", 18));
 
       let globalScore = await scoreEngine.globalScoresByType(supplierAddr, ScoreType.TRUST);
-      expect(globalScore).to.equal(8);
+      expect(globalScore).to.equal(ethers.parseUnits("8", 18));
 
       // Second rating: value 6.
-      // Expected newEMA = (10*6 + 90*8)/100 = 780/100 = 7 (integer division).
+      // For a Factory, effectiveAlpha = (BASE_ALPHA * 100) / 100 = 1.
+      // Expected newEMA = (1 * (6 * PRECISION) + (99 * (8 * PRECISION)))/100
+      //                = (6e18 + 792e18) / 100 = 798e18/100 = 7.98e18.
       const tx2 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 6);
       const event2 = await getScoreAssignedEvent(tx2);
-      expect(event2.args.value).to.equal(7);
+      console.log(event2.args.value);
+      expect(event2.args.value).to.equal(7980000000000000000n);
 
       globalScore = await scoreEngine.globalScoresByType(supplierAddr, ScoreType.TRUST);
-      expect(globalScore).to.equal(7);
+      expect(globalScore).to.equal(7980000000000000000n);
     });
 
     it("allows a Consumer to rate a Factory with valid score type (PRODUCT_QUALITY)", async function () {
       const factoryAddr = await factory.getAddress();
       const consumerAddr = await consumer.getAddress();
 
+      // For a Consumer, first rating sets EMA = value * PRECISION.
       const tx = await scoreEngine.connect(consumer).rateStakeholder(factoryAddr, ScoreType.PRODUCT_QUALITY, 9);
       const event = await getScoreAssignedEvent(tx);
       expect(event.args.rater).to.equal(consumerAddr);
       expect(event.args.rated).to.equal(factoryAddr);
       expect(event.args.scoreType).to.equal(ScoreType.PRODUCT_QUALITY);
-      expect(event.args.value).to.equal(9);
+      expect(event.args.value).to.equal(ethers.parseUnits("9", 18));
 
       const ema = await scoreEngine.globalScoresByType(factoryAddr, ScoreType.PRODUCT_QUALITY);
-      expect(ema).to.equal(9);
+      expect(ema).to.equal(ethers.parseUnits("9", 18));
     });
 
     it("allows a Retailer to rate a Distributor with valid score type (PACKAGING)", async function () {
       const distributorAddr = await distributor.getAddress();
       const retailerAddr = await retailer.getAddress();
 
+      // For a Retailer, first rating sets EMA = value * PRECISION.
       const tx = await scoreEngine.connect(retailer).rateStakeholder(distributorAddr, ScoreType.PACKAGING, 7);
       const event = await getScoreAssignedEvent(tx);
       expect(event.args.rater).to.equal(retailerAddr);
       expect(event.args.rated).to.equal(distributorAddr);
       expect(event.args.scoreType).to.equal(ScoreType.PACKAGING);
-      expect(event.args.value).to.equal(7);
+      expect(event.args.value).to.equal(ethers.parseUnits("7", 18));
 
       const ema = await scoreEngine.globalScoresByType(distributorAddr, ScoreType.PACKAGING);
-      expect(ema).to.equal(7);
+      expect(ema).to.equal(ethers.parseUnits("7", 18));
     });
 
     it("allows a Consumer to rate a Retailer with valid score type (DELIVERY)", async function () {
       const retailerAddr = await retailer.getAddress();
       const consumerAddr = await consumer.getAddress();
 
+      // For a Consumer, first rating sets EMA = value * PRECISION.
       const tx = await scoreEngine.connect(consumer).rateStakeholder(retailerAddr, ScoreType.DELIVERY, 10);
       const event = await getScoreAssignedEvent(tx);
       expect(event.args.rater).to.equal(consumerAddr);
       expect(event.args.rated).to.equal(retailerAddr);
       expect(event.args.scoreType).to.equal(ScoreType.DELIVERY);
-      expect(event.args.value).to.equal(10);
+      expect(event.args.value).to.equal(ethers.parseUnits("10", 18));
 
       const ema = await scoreEngine.globalScoresByType(retailerAddr, ScoreType.DELIVERY);
-      expect(ema).to.equal(10);
+      expect(ema).to.equal(ethers.parseUnits("10", 18));
     });
 
     it("updates score history and getter functions correctly", async function () {
       const supplierAddr = await supplier.getAddress();
       const factoryAddr = await factory.getAddress();
 
+      // First rating: value 8 -> EMA = 8 * PRECISION.
       const tx1 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 8);
       const event1 = await getScoreAssignedEvent(tx1);
       const scoreId1 = event1.args.scoreId;
 
+      // Second rating: value 6 -> EMA = (99*(6 * PRECISION) + 1*(8 * PRECISION))/100 = 6.02 * PRECISION.
       const tx2 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 6);
       const event2 = await getScoreAssignedEvent(tx2);
       const scoreId2 = event2.args.scoreId;
 
       const scores = await scoreEngine.getScores(supplierAddr);
       expect(scores.length).to.equal(2);
-      expect(scores[1].value).to.equal(7); // EMA computed as 7 in a previous test.
+      expect(scores[1].value).to.equal(7980000000000000000n);
 
       const scoreIds = await scoreEngine.getStakeholderScoreIds(supplierAddr);
       expect(scoreIds.length).to.equal(2);
@@ -173,10 +184,10 @@ describe("ScoreEngine", function () {
       expect(scoreIds[1]).to.equal(scoreId2);
 
       const scoreRecord1 = await scoreEngine.getScoreById(scoreId1);
-      expect(scoreRecord1.value).to.equal(8);
+      expect(scoreRecord1.value).to.equal(ethers.parseUnits("8", 18));
       expect(scoreRecord1.scoreType).to.equal(ScoreType.TRUST);
       const scoreRecord2 = await scoreEngine.getScoreById(scoreId2);
-      expect(scoreRecord2.value).to.equal(7);
+      expect(scoreRecord2.value).to.equal(7980000000000000000n);
       expect(scoreRecord2.scoreType).to.equal(ScoreType.TRUST);
     });
 
@@ -243,8 +254,6 @@ describe("ScoreEngine", function () {
       let newConfidence = await scoreEngine.confidenceScores(factory.address);
       expect(newConfidence).to.equal(88);
     });
-
-    
 
     it("reverts updateConfidenceAfterDispute if rater is not Factory or Retailer", async function () {
       let dispute = {
