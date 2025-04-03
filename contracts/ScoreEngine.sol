@@ -133,6 +133,10 @@ contract ScoreEngine is Ownable {
     uint256 newEMA;
     if (scoreCountsByType[_rated][_scoreType] == 0) {
         // First rating: set EMA to the raw value.
+        if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
+            if (confidenceScores[msg.sender] == 0) {
+                confidenceScores[msg.sender] = 100;
+            }}
         newEMA = _value;
     } else {
         uint effectiveAlpha;
