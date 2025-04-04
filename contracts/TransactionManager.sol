@@ -61,7 +61,7 @@ contract TransactionManager {
 
         if (sellerRole == 1 && buyerRole == 2) {
             // Supplier->Factory: no reward deposit required.
-        } else if (sellerRole == 3 && buyerRole == 4) {
+        } else if ((sellerRole == 3 && buyerRole == 4) || (sellerRole == 4 && buyerRole == 5)) {
             // Distributor->Retailer: require token deposit.
             require(
                 token.allowance(msg.sender, address(this)) >= REWARD_AMOUNT,
@@ -69,8 +69,6 @@ contract TransactionManager {
             );
             bool success = token.transferFrom(msg.sender, address(this), REWARD_AMOUNT);
             require(success, "Token transfer for reward deposit failed");
-        } else if (sellerRole == 4 && buyerRole == 5) {
-            // Retailer->Consumer: no reward deposit required.
         } else {
             revert("Invalid seller-buyer role combination for non-factory sale");
         }
@@ -149,7 +147,7 @@ contract TransactionManager {
         } else if (sellerRole == 4 && buyerRole == 5) {
             // For Retailer->Consumer, take tokens directly from the seller.
             require(
-                token.transferFrom(txn.seller, address(scoreEngine), REWARD_AMOUNT),
+                token.transfer(address(scoreEngine), REWARD_AMOUNT),
                 "Token transfer for reward failed"
             );
         }
