@@ -4,6 +4,8 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StakeholderRegistry.sol";
 import "./DisputeManager.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 
 /**
  * @title ScoreEngine
@@ -24,6 +26,10 @@ contract ScoreEngine is Ownable {
     uint256 public constant BASE_ALPHA = 1;
     // Precision constant for fixed-point arithmetic
     uint256 public constant PRECISION = 1e18;
+    
+    uint256 public constant REWARD_AMOUNT = 10 * 1e18; // Fixed reward: 10 PTK
+
+    IERC20 public token;
 
     /**
      * @dev Enum of all possible score types, consolidated from your table:
@@ -99,9 +105,10 @@ contract ScoreEngine is Ownable {
      * @dev The constructor expects the addresses of the deployed StakeholderRegistry
      *      and DisputeManager.
      */
-    constructor (address _registryAddress, address _disputeManagerAddress) Ownable(msg.sender) {
+    constructor (address _registryAddress, address _disputeManagerAddress, address _token) Ownable(msg.sender) {
         registry = StakeholderRegistry(_registryAddress);
         disputeManager = DisputeManager(payable(_disputeManagerAddress));
+        token = IERC20(_token);
     }
 
     /**
@@ -131,23 +138,20 @@ contract ScoreEngine is Ownable {
             "Invalid role or score type for this rating"
         );
 
+        //initialize condifenceScores
+        if (confidenceScores[msg.sender] == 0) {
+            confidenceScores[msg.sender] = 100;
+        }
+
         // Compute the new exponential moving average (EMA) for this score type.
         uint256 newEMA;
         if (scoreCountsByType[_rated][_scoreType] == 0) {
             // First rating: set EMA to the raw value scaled by PRECISION.
-            if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
-                if (confidenceScores[msg.sender] == 0) {
-                    confidenceScores[msg.sender] = 100;
-                }
-            }
             newEMA = uint256(_value) * PRECISION;
         } else {
             uint effectiveAlpha;
             // For Factories or Retailers, adjust the base alpha by the rater's confidence.
             if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
-                if (confidenceScores[msg.sender] == 0) {
-                    confidenceScores[msg.sender] = 100;
-                }
                 effectiveAlpha = (BASE_ALPHA * confidenceScores[msg.sender]) / 100;
             } else {
                 effectiveAlpha = BASE_ALPHA;
@@ -180,6 +184,14 @@ contract ScoreEngine is Ownable {
         stakeholderScoreIds[_rated].push(newScoreId);
 
         emit ScoreAssigned(msg.sender, _rated, _scoreType, newEMA, block.timestamp, newScoreId);
+
+        // handle returning of small reward for article review that was included in the initial price of the device
+        if(raterRole == StakeholderRegistry.Role.Consumer){
+            require(address(token) != address(0), "Token address not set");
+            require(token.balanceOf(address(this)) >= REWARD_AMOUNT, "Insufficient reward funds in contract");
+            bool sent = token.transfer(msg.sender, REWARD_AMOUNT);
+            require(sent, "Token transfer failed");
+        }
     }
 
     /**
@@ -275,7 +287,6 @@ contract ScoreEngine is Ownable {
         }
         // Factory (scored by Consumer) => PRODUCT_QUALITY, WARRANTY, ECO_RATING.
         if (ratedRole == StakeholderRegistry.Role.Factory && raterRole == StakeholderRegistry.Role.Consumer) {
-            // handle returning of small reward for article review that was included in the initial price of the device
             return (
                 scoreType == ScoreType.PRODUCT_QUALITY ||
                 scoreType == ScoreType.WARRANTY ||
