@@ -3,7 +3,7 @@ const { ethers } = require("hardhat");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 describe("ScoreEngine", function () {
-  let scoreEngine, registry, disputeManager;
+  let scoreEngine, registry, disputeManager, token, productManager;
   let deployer, supplier, factory, consumer, retailer, distributor, nonRegistered;
 
   // StakeholderRegistry roles (assumed order: None=0, Supplier=1, Factory=2, Distributor=3, Retailer=4, Consumer=5)
@@ -67,6 +67,12 @@ describe("ScoreEngine", function () {
     registry = await StakeholderRegistry.deploy();
     await registry.waitForDeployment();
 
+    //Deploy ProductManager
+    const ProductManager = await ethers.getContractFactory("ProductManager");
+    productManager = await ProductManager.deploy();
+    await productManager.waitForDeployment();
+    
+
     // Register stakeholders (assume registerStakeholder(role, metadataURI))
     await registry.connect(supplier).registerStakeholder(Role.Supplier, "supplier metadata");
     await registry.connect(factory).registerStakeholder(Role.Factory, "factory metadata");
@@ -86,7 +92,7 @@ describe("ScoreEngine", function () {
 
     // Deploy ScoreEngine using the registry, disputeManager and token addresses.
     const ScoreEngine = await ethers.getContractFactory("ScoreEngine");
-    scoreEngine = await ScoreEngine.deploy(registry.getAddress(), disputeManager.getAddress(), token.getAddress());
+    scoreEngine = await ScoreEngine.deploy(registry.getAddress(), disputeManager.getAddress(), token.getAddress(), productManager.getAddress());
     await scoreEngine.waitForDeployment();
     await token.transfer(scoreEngine.getAddress(), ethers.parseUnits("1000", 18));
 

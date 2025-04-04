@@ -80,11 +80,11 @@ contract ProductManager is ERC721, Ownable {
      * - The recipient address must be valid.
      */
     function transferProduct(address _to, uint256 _productId) external {
-        require(ownerOf(_productId) == msg.sender, "Caller is not owner of the product");
+        require(ownerOf(_productId) == tx.origin, "Caller is not owner of the product");
         require(_to != address(0), "Invalid recipient address");
 
         // Use ERC721's safeTransferFrom to perform the transfer.
-        safeTransferFrom(msg.sender, _to, _productId);
+        _transfer(tx.origin, _to, _productId);
 
         // Update product details: new current owner and update the timestamp.
         products[_productId].currentOwner = _to;
@@ -93,7 +93,7 @@ contract ProductManager is ERC721, Ownable {
         // Append the new owner to the product history.
         productHistory[_productId].push(_to);
 
-        emit ProductTransferred(_productId, msg.sender, _to);
+        emit ProductTransferred(_productId, tx.origin, _to);
     }
 
     /**

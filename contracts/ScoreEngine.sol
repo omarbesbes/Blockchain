@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StakeholderRegistry.sol";
 import "./DisputeManager.sol";
+import "./ProductManager.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 
@@ -21,6 +22,10 @@ contract ScoreEngine is Ownable {
 
     // Reference to the DisputeManager (if needed)
     DisputeManager private disputeManager;
+
+    // Reference to the ProductManager
+    ProductManager public productManager;
+
 
     // Constant base alpha, expressed as an integer percentage (e.g., 10 means 10%)
     uint256 public constant BASE_ALPHA = 1;
@@ -105,10 +110,11 @@ contract ScoreEngine is Ownable {
      * @dev The constructor expects the addresses of the deployed StakeholderRegistry
      *      and DisputeManager.
      */
-    constructor (address _registryAddress, address _disputeManagerAddress, address _token) Ownable(msg.sender) {
+    constructor (address _registryAddress, address _disputeManagerAddress, address _token, address _productManagerAddress) Ownable(msg.sender) {
         registry = StakeholderRegistry(_registryAddress);
         disputeManager = DisputeManager(payable(_disputeManagerAddress));
         token = IERC20(_token);
+        productManager = ProductManager(_productManagerAddress);
     }
 
     /**
@@ -128,7 +134,7 @@ contract ScoreEngine is Ownable {
         require(registry.isRegistered(_rated), "Rated stakeholder not registered");
 
         // Identify roles of rater and rated.
-        StakeholderRegistry.Role raterRole = registry.getRole(msg.sender);
+        StakeholderRegistry.Role raterRole = registry.getRole(tx.origin);
         StakeholderRegistry.Role ratedRole = registry.getRole(_rated);
 
         require(raterRole != StakeholderRegistry.Role.None, "Rater not valid");
@@ -139,8 +145,8 @@ contract ScoreEngine is Ownable {
         );
 
         //initialize condifenceScores
-        if (confidenceScores[msg.sender] == 0) {
-            confidenceScores[msg.sender] = 100;
+        if (confidenceScores[tx.origin] == 0) {
+            confidenceScores[tx.origin] = 100;
         }
 
         // Compute the new exponential moving average (EMA) for this score type.
@@ -152,7 +158,7 @@ contract ScoreEngine is Ownable {
             uint effectiveAlpha;
             // For Factories or Retailers, adjust the base alpha by the rater's confidence.
             if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
-                effectiveAlpha = (BASE_ALPHA * confidenceScores[msg.sender]) / 100;
+                effectiveAlpha = (BASE_ALPHA * confidenceScores[tx.origin]) / 100;
             } else {
                 effectiveAlpha = BASE_ALPHA;
             }
@@ -167,7 +173,7 @@ contract ScoreEngine is Ownable {
         Score memory newScore = Score({
             scoreType: _scoreType,
             value: newEMA,
-            rater: msg.sender,
+            rater: tx.origin,
             timestamp: block.timestamp
         });
         stakeholderScores[_rated].push(newScore);
@@ -178,18 +184,18 @@ contract ScoreEngine is Ownable {
         scoreHistory[newScoreId] = ScoreRecord({
             scoreType: _scoreType,
             value: newEMA,
-            rater: msg.sender,
+            rater: tx.origin,
             timestamp: block.timestamp
         });
         stakeholderScoreIds[_rated].push(newScoreId);
 
-        emit ScoreAssigned(msg.sender, _rated, _scoreType, newEMA, block.timestamp, newScoreId);
+        emit ScoreAssigned(tx.origin, _rated, _scoreType, newEMA, block.timestamp, newScoreId);
 
         // handle returning of small reward for article review that was included in the initial price of the device
-        if(raterRole == StakeholderRegistry.Role.Consumer){
+        if(raterRole == StakeholderRegistry.Role.Consumer && ratedRole == StakeholderRegistry.Role.Factory) {
             require(address(token) != address(0), "Token address not set");
             require(token.balanceOf(address(this)) >= REWARD_AMOUNT, "Insufficient reward funds in contract");
-            bool sent = token.transfer(msg.sender, REWARD_AMOUNT);
+            bool sent = token.transfer(tx.origin, REWARD_AMOUNT);
             require(sent, "Token transfer failed");
         }
     }
