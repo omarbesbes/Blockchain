@@ -5,12 +5,14 @@ import "./StakeholderRegistry.sol";
 import "./ProductManager.sol";
 import "./ScoreEngine.sol";
 import "./Token.sol";
+import "./DisputeManager.sol";
 
 contract TransactionManager {
     StakeholderRegistry public registry;
     ProductManager public productManager;
     ScoreEngine public scoreEngine;
     Token public token;
+    DisputeManager public disputeManager;
 
     uint256 public constant REWARD_AMOUNT = 10 * 1e18;
     uint256 public transactionCounter;
@@ -43,12 +45,14 @@ contract TransactionManager {
         address _registry,
         address _productManager,
         address _scoreEngine,
-        address _token
+        address _token,
+        address payable _disputeManager
     ) {
         registry = StakeholderRegistry(_registry);
         productManager = ProductManager(_productManager);
         scoreEngine = ScoreEngine(_scoreEngine);
         token = Token(_token);
+        disputeManager = DisputeManager(_disputeManager);
     }
 
     // New function: Buyer initiates the transaction
@@ -60,7 +64,7 @@ contract TransactionManager {
         int256 sellerRole = int256(uint256(registry.getRole(seller)));
 
         if (!(buyerRole - sellerRole == 1)) {
-            revert("Invalid buyer-seller role combination for non-factory transaction");
+            revert("Invalid buyer-seller role combination for transaction");
         }
 
         transactionCounter++;
@@ -112,7 +116,7 @@ contract TransactionManager {
         if (sellerRole >= 2 && txn.productId > 0) {
             productManager.transferProduct(txn.buyer, txn.productId);
         }
-
+        disputeManager.recordPurchase(txn.buyer, txn.seller);
         emit TransactionValidated(transactionId);
     }
 

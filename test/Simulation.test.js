@@ -61,10 +61,6 @@ describe("Network Simulation", function () {
     const productManager = await ProductManager.deploy();
     await productManager.waitForDeployment();
 
-    const DisputeManager = await ethers.getContractFactory("DisputeManager");
-    const disputeManager = await DisputeManager.deploy(await registry.getAddress());
-    await disputeManager.waitForDeployment();
-
     const Token = await ethers.getContractFactory("Token");
     const token = await Token.deploy();
     await token.waitForDeployment();
@@ -72,18 +68,23 @@ describe("Network Simulation", function () {
     const ScoreEngine = await ethers.getContractFactory("ScoreEngine");
     const scoreEngine = await ScoreEngine.deploy(
       await registry.getAddress(),
-      await disputeManager.getAddress(),
       await token.getAddress(),
       await productManager.getAddress()
     );
     await scoreEngine.waitForDeployment();
+
+    const DisputeManager = await ethers.getContractFactory("DisputeManager");
+    const disputeManager = await DisputeManager.deploy(await registry.getAddress(), await scoreEngine.getAddress());
+    await disputeManager.waitForDeployment();
+
 
     const TransactionManager = await ethers.getContractFactory("TransactionManager");
     const transactionManager = await TransactionManager.deploy(
       await registry.getAddress(),
       await productManager.getAddress(),
       await scoreEngine.getAddress(),
-      await token.getAddress()
+      await token.getAddress(),
+      await disputeManager.getAddress()
     );
     await transactionManager.waitForDeployment();
 
