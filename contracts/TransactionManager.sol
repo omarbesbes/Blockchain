@@ -55,6 +55,7 @@ contract TransactionManager {
     function recordBuyOperation(address seller, uint256 productId) external returns (uint256) {
         require(registry.isRegistered(msg.sender), "Buyer not registered");
         require(registry.isRegistered(seller), "Seller not registered");
+        require(!hasPendingTransaction(productId), "Pending transaction exists for this product");
 
         int256 buyerRole = int256(uint256(registry.getRole(msg.sender)));
         int256 sellerRole = int256(uint256(registry.getRole(seller)));
@@ -164,4 +165,69 @@ contract TransactionManager {
 
         emit SellerRated(transactionId, rater, toBeRated);
     }
+    //// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\contracts\TransactionManager.sol
+// Add this function to your TransactionManager contract
+
+/**
+ * @notice Returns the ID of any pending transaction for a given product
+ * @param productId The ID of the product to check
+ * @return transactionId The ID of the pending transaction, or 0 if none exists
+ */
+function getPendingTransactionByProduct(uint256 productId) external view returns (uint256) {
+    // Start from the latest transaction and work backwards
+    // This is more gas efficient than checking from the beginning when most
+    // recent transactions are more likely to be pending
+    for (uint256 i = transactionCounter; i > 0; i--) {
+        Transaction storage txn = transactions[i];
+        if (txn.productId == productId && txn.status == TransactionStatus.Pending) {
+            return txn.id;
+        }
+    }
+    
+    // Return 0 if no pending transaction was found for this product
+    return 0;
+}
+
+/**
+ * @notice Returns all pending transaction IDs for a given product
+ * @param productId The ID of the product to check
+ * @return An array of transaction IDs that are pending for this product
+ */
+function getAllPendingTransactionsByProduct(uint256 productId) external view returns (uint256[] memory) {
+    // First, count how many pending transactions exist for this product
+    uint256 count = 0;
+    for (uint256 i = 1; i <= transactionCounter; i++) {
+        if (transactions[i].productId == productId && transactions[i].status == TransactionStatus.Pending) {
+            count++;
+        }
+    }
+    
+    // Then create an array of the correct size and populate it
+    uint256[] memory results = new uint256[](count);
+    uint256 index = 0;
+    
+    for (uint256 i = 1; i <= transactionCounter; i++) {
+        if (transactions[i].productId == productId && transactions[i].status == TransactionStatus.Pending) {
+            results[index] = i;
+            index++;
+        }
+    }
+    
+    return results;
+}
+
+/**
+ * @notice Returns whether a pending transaction exists for a given product
+ * @param productId The ID of the product to check
+ * @return True if a pending transaction exists, false otherwise
+ */
+function hasPendingTransaction(uint256 productId) public view returns (bool) {
+    for (uint256 i = transactionCounter; i > 0; i--) {
+        Transaction storage txn = transactions[i];
+        if (txn.productId == productId && txn.status == TransactionStatus.Pending) {
+            return true;
+        }
+    }
+    return false;
+}
 }
