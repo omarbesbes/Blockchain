@@ -1,4 +1,4 @@
-// src/hooks/useScoreEngine.js
+//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\hooks\useScoreEngine.js
 import { getContract } from 'viem';
 import { useWalletClient, usePublicClient } from 'wagmi';
 import { scoreEngineAddress, scoreEngineABI } from '../contracts/ScoreEngine';
@@ -18,7 +18,7 @@ export function useScoreEngine() {
   });
 
   /**
-   * Rate a stakeholder (transaction)
+   * Transaction: rate a stakeholder for a given score type.
    * @param {string} rated - the address being rated
    * @param {number} scoreType - the score type enum value (e.g., 0 for TRUST)
    * @param {number} value - the rating value (e.g., 1 to 10)
@@ -36,69 +36,65 @@ export function useScoreEngine() {
   }
 
   /**
-   * Get the global score for a stakeholder for a specific score type.
+   * Read: get the aggregated global score for a stakeholder for a specific score type.
    * @param {string} stakeholder - the address to query
    * @param {number} scoreType - the score type enum value
-   * @returns {Promise<bigint>} The score (scaled by PRECISION)
+   * @returns {Promise<bigint>} The raw score (scaled by PRECISION, e.g. 1e18)
    */
   async function getGlobalScore(stakeholder, scoreType) {
-    const score = await publicClient.readContract({
+    return publicClient.readContract({
       address: scoreEngineAddress,
       abi: scoreEngineABI,
       functionName: 'globalScoresByType',
       args: [stakeholder, scoreType],
     });
-    return score;
   }
 
   /**
-   * Get all scores for a stakeholder.
+   * Read: get an array of all Score records for a stakeholder (Score structs).
    * @param {string} stakeholder - the address to query
    * @returns {Promise<Array>} An array of Score structs
    */
   async function getScores(stakeholder) {
-    const scores = await publicClient.readContract({
+    return publicClient.readContract({
       address: scoreEngineAddress,
       abi: scoreEngineABI,
       functionName: 'getScores',
       args: [stakeholder],
     });
-    return scores;
   }
 
   /**
-   * Get all score IDs for a stakeholder.
+   * Read: get an array of score IDs belonging to a stakeholder.
    * @param {string} stakeholder - the address to query
-   * @returns {Promise<Array>} An array of score IDs (uint256[])
+   * @returns {Promise<Array<number>>} An array of score record IDs
    */
   async function getStakeholderScoreIds(stakeholder) {
-    const scoreIds = await publicClient.readContract({
+    return publicClient.readContract({
       address: scoreEngineAddress,
       abi: scoreEngineABI,
       functionName: 'getStakeholderScoreIds',
       args: [stakeholder],
     });
-    return scoreIds;
   }
 
   /**
-   * Get a ScoreRecord by its ID.
-   * @param {number|string} scoreId - the ID of the score record
+   * Read: retrieve a specific ScoreRecord by its ID.
+   * @param {number} scoreId - the ID of the score record
    * @returns {Promise<Object>} The ScoreRecord struct
    */
   async function getScoreById(scoreId) {
-    const scoreRecord = await publicClient.readContract({
+    return publicClient.readContract({
       address: scoreEngineAddress,
       abi: scoreEngineABI,
       functionName: 'getScoreById',
       args: [scoreId],
     });
-    return scoreRecord;
   }
 
   /**
-   * Update the confidence score after a dispute (transaction).
-   * Note: This function is intended for administrative use (onlyOwner).
+   * Transaction: update confidence scores after a dispute.
+   * (Typically requires special permissions, e.g., onlyOwner.)
    * @param {Object} dispute - The dispute struct as expected by the contract
    */
   async function updateConfidenceAfterDispute(dispute) {
@@ -114,11 +110,10 @@ export function useScoreEngine() {
   }
 
   /**
-   * Set a manual score for a stakeholder (transaction).
-   * This function is intended for administrative use (e.g., seeding data).
-   * @param {string} stakeholder - the address of the stakeholder
-   * @param {number} scoreType - the score type enum value
-   * @param {bigint} newScore - the new score (should be scaled by PRECISION)
+   * Transaction: manually set a score for a stakeholder (for admin / seeding).
+   * @param {string} stakeholder - stakeholder address
+   * @param {number} scoreType - score enum value
+   * @param {bigint} newScore - raw score (scaled by PRECISION)
    */
   async function setManualScore(stakeholder, scoreType, newScore) {
     if (!walletClient) throw new Error('No wallet connected');
@@ -131,22 +126,22 @@ export function useScoreEngine() {
     });
     return publicClient.waitForTransactionReceipt({ hash: txHash });
   }
+
   /**
-   * Get applicable score types for a given stakeholder.
-   * Calls the contract function getApplicableScoreTypes.
-   * @param {string} stakeholder - the address to query.
-   * @returns {Promise<Array<number>>} An array of applicable score types.
+   * Read: get the array of applicable score types for a stakeholder.
+   * @param {string} stakeholder - address to query
+   * @returns {Promise<Array<number>>} Score type IDs the contract deems "applicable"
    */
   async function getApplicableScoreTypes(stakeholder) {
-    const types = await publicClient.readContract({
+    return publicClient.readContract({
       address: scoreEngineAddress,
       abi: scoreEngineABI,
       functionName: 'getApplicableScoreTypes',
       args: [stakeholder],
     });
-    return types;
   }
 
+  // Expose all relevant ScoreEngine functions
   return {
     rateStakeholder,
     getGlobalScore,
@@ -155,6 +150,6 @@ export function useScoreEngine() {
     getScoreById,
     updateConfidenceAfterDispute,
     setManualScore,
-    getApplicableScoreTypes
+    getApplicableScoreTypes,
   };
 }

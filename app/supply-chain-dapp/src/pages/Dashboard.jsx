@@ -4,12 +4,14 @@ import { useAccount } from 'wagmi';
 import { useStakeholderRegistry } from '../hooks/useStakeholderRegistry';
 import { useGetProductsByOwner, useProductManager } from '../hooks/useProductManager';
 import { useScoreEngine } from '../hooks/useScoreEngine';
+import { useToken } from '../hooks/useToken';
 import './Dashboard.css';
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
   const { getStakeholderType } = useStakeholderRegistry();
   const { getGlobalScore, getApplicableScoreTypes } = useScoreEngine();
+  
 
   // Product Manager hooks
   const { products, error: productsError, isPending: productsLoading } = useGetProductsByOwner(address);
@@ -30,6 +32,11 @@ export default function Dashboard() {
   // Array to hold product details (including metadata)
   const [productDetailsList, setProductDetailsList] = useState([]);
 
+  // State for token balance and buying tokens
+  const [tokenBalance, setTokenBalance] = useState(0);
+  const [buyAmount, setBuyAmount] = useState('');
+  const [message, setMessage] = useState('');
+
   // Score type mapping
   const scoreTypeMapping = {
     0: 'Trust',
@@ -45,6 +52,9 @@ export default function Dashboard() {
     10: 'Price fairness',
     11: 'Return policy',
   };
+
+  // Token hooks
+  const { balanceOf, buy } = useToken();
 
   // 1) Fetch user's stakeholder role (dependency: address only)
   useEffect(() => {
@@ -115,6 +125,21 @@ export default function Dashboard() {
     }
   }, [products, productsLoading, productsError]); // Removed getProductDetails
 
+  // 4) Fetch token balance when role is "Factory" (dependency: role, address)
+  useEffect(() => {
+    async function fetchBalance() {
+      if (role === 'Factory' && address) {
+        try {
+          const balance = await balanceOf(address);
+          setTokenBalance(Number(balance));
+        } catch (err) {
+          console.error('Error fetching balance:', err);
+        }
+      }
+    }
+    fetchBalance();
+  }, [role, address, balanceOf]);
+
   if (!isConnected) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -157,6 +182,34 @@ export default function Dashboard() {
     }
   };
 
+  // Handler to buy tokens
+  //// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\Dashboard.jsx
+// Handler to buy tokens
+const handleBuyTokens = async () => {
+  if (!buyAmount || isNaN(buyAmount) || Number(buyAmount) <= 0) {
+    setMessage('Enter a valid token amount.');
+    return;
+  }
+  
+  try {
+    // Convert to BigInt for the transaction
+    const amountBigInt = BigInt(buyAmount); // Assuming 18 decimals
+    
+    // Call buy with just the amount (not the address)
+    // The contract will use msg.sender as recipient
+    await buy(amountBigInt); 
+    
+    // Refresh balance after purchase
+    const newBalance = await balanceOf(address);
+    setTokenBalance(Number(newBalance)); 
+    
+    setMessage(`Successfully bought ${buyAmount} tokens.`);
+    setBuyAmount('');
+  } catch (err) {
+    console.error('Error buying tokens:', err);
+    setMessage('Transaction failed: ' + err.message);
+  }
+};
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
@@ -249,6 +302,27 @@ export default function Dashboard() {
               Update Product Metadata
             </button>
           </div>
+        </section>
+      )}
+
+      {/* Section: Buy tokens (Factory only) */}
+      {role === 'Factory' && (
+        <section className="dashboard-section token-section">
+          <h2>Your Token Balance</h2>
+          <p>Balance: {tokenBalance}</p>
+          <div className="token-buy">
+            <input
+              type="text"
+              className="dashboard-input"
+              placeholder="Amount of tokens to buy"
+              value={buyAmount}
+              onChange={(e) => setBuyAmount(e.target.value)}
+            />
+            <button className="btn btn-primary" onClick={handleBuyTokens}>
+              Buy Tokens
+            </button>
+          </div>
+          {message && <p>{message}</p>}
         </section>
       )}
     </div>

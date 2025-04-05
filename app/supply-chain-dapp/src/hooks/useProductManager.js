@@ -1,4 +1,4 @@
-//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\hooks\useProductManager.js
+// src/hooks/useProductManager.js
 import { useWalletClient, usePublicClient, useReadContract } from 'wagmi';
 import { productManagerAddress, productManagerABI } from '../contracts/ProductManager';
 
@@ -30,24 +30,22 @@ export function useProductManager() {
     return publicClient.waitForTransactionReceipt({ hash: txHash });
   }
 
-  async function buyProduct(productId) {
-    if (!walletClient) throw new Error('No wallet connected');
-    const buyerAddress = walletClient.account.address;
-    const txHash = await walletClient.writeContract({
-      address: productManagerAddress,
-      abi: productManagerABI,
-      functionName: 'transferProduct',
-      args: [buyerAddress, BigInt(productId)],
-      account: walletClient.account,
-    });
-    return publicClient.waitForTransactionReceipt({ hash: txHash });
-  }
+ 
 
   async function getProductDetails(productId) {
-    return publicClient.readContract({
+    return await publicClient.readContract({
       address: productManagerAddress,
       abi: productManagerABI,
       functionName: 'getProductDetails',
+      args: [BigInt(productId)],
+    });
+  }
+
+  async function getProductHistory(productId) {
+    return await publicClient.readContract({
+      address: productManagerAddress,
+      abi: productManagerABI,
+      functionName: 'getProductHistory',
       args: [BigInt(productId)],
     });
   }
@@ -64,12 +62,22 @@ export function useProductManager() {
     return publicClient.waitForTransactionReceipt({ hash: txHash });
   }
 
+  async function getProductsByOwner(ownerAddress) {
+    return await publicClient.readContract({
+      address: productManagerAddress,
+      abi: productManagerABI,
+      functionName: 'getProductsByOwner',
+      args: [ownerAddress],
+    });
+  }
+
   return {
     mintProduct,
     transferProduct,
-    buyProduct,
     getProductDetails,
+    getProductHistory,
     updateProductMetadata,
+    getProductsByOwner,
   };
 }
 

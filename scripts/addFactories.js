@@ -11,7 +11,7 @@ async function main() {
   console.log("Attached to StakeholderRegistry at:", await registry.getAddress());
 
   // // Get signers (these simulate different accounts)
-  const [owner, stakeholder1, stakeholder2, stakeholder3] = await ethers.getSigners();
+  const [owner, stakeholder1, stakeholder2, stakeholder3,acc4,acc5,acc6] = await ethers.getSigners();
 
   // Define roles and metadata URIs.
   // Adjust role numbers as defined in your contract's enum.
