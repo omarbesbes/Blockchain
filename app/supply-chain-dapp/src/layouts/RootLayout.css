@@ -1,0 +1,81 @@
+/* RootLayout.css */
+
+:root {
+    --primary-color: #4a90e2;
+    --secondary-color: #50e3c2;
+    --background-color: #f7f9fc;
+    --text-color: #333;
+    --border-color: #e0e0e0;
+    --font-family: 'Roboto', sans-serif;
+  }
+  
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  
+  body {
+    font-family: var(--font-family);
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+  }
+  
+  nav {
+    background-color: #fff;
+    display: flex;
+    align-items: center;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+  
+  nav a {
+    text-decoration: none;
+    color: var(--primary-color);
+    margin-right: 2rem;
+    font-weight: 500;
+    transition: color 0.3s ease;
+  }
+  
+  nav a:hover {
+    color: var(--secondary-color);
+  }
+  
+  main {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  /* src/components/ConnectWalletButton.css */
+.connect-wallet-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1rem;
+  flex-direction: column;
+}
+
+.connect-wallet-button {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: bold;
+  background-color: #0070f3;
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin: 0.5rem;
+}
+
+.connect-wallet-button:hover {
+  background-color: #005bb5;
+}
+
+.connect-wallet-address {
+  font-size: 1rem;
+  color: #333;
+  margin: 1rem;
+}

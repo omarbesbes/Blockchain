@@ -1,0 +1,115 @@
+/* StakeholderList.css */
+
+/* Container wrapping the entire tab */
+.stakeholder-list-container {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background: #f7f8fa;
+    min-height: calc(100vh - 80px); /* Adjust as needed if you have a fixed header */
+  }
+  
+  /* Headings and text styling */
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+  .section-subtitle {
+    font-size: 1.2rem;
+    font-weight: 500;
+    margin-bottom: 0.75rem;
+  }
+  .highlight {
+    font-weight: 600;
+    color: #0066cc;
+  }
+  
+  p {
+    margin: 0.5rem 0;
+  }
+  
+  /* Each distinct section (stakeholders, products, etc.) */
+  .stakeholder-section {
+    background: #fff;
+    border-radius: 6px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  
+  /* Grid for stakeholder cards */
+  .stakeholder-grid {
+    display: grid;
+    grid-gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+  
+  /* Stakeholder item (clickable card) */
+  .stakeholder-card {
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: 1rem;
+    transition: background-color 0.2s ease-in-out;
+    cursor: pointer;
+  }
+  .stakeholder-card:hover {
+    background-color: #fafafa;
+  }
+  .card-label {
+    color: #888;
+    font-size: 0.9rem;
+  }
+  .card-value {
+    word-break: break-all;
+    margin-top: 0.25rem;
+  }
+  
+  /* Products list styling */
+  .products-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+  }
+  .products-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    background-color: #fafafa;
+    margin-bottom: 0.5rem;
+  }
+  .product-label {
+    font-weight: 500;
+  }
+  
+  /* Buy button styling */
+  .buy-btn {
+    background: #007bff;
+    border: none;
+    color: #fff;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease-in-out;
+  }
+  .buy-btn:hover {
+    background: #005fcc;
+  }
+  /* Example snippet in StakeholderList.css */
+.scores-container {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: #444;
+  }
+  
+  /* rating-count can just be smaller or lighter text if desired */
+  .rating-count {
+    margin-top: 0.25rem;
+    font-size: 0.85rem;
+    color: #777;
+  }
+  

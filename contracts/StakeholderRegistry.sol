@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  */
 contract StakeholderRegistry is Ownable {
     constructor() Ownable(msg.sender) {}
+
     // Define possible roles. 'None' represents an invalid role.
     enum Role { None, Supplier, Factory, Distributor, Retailer, Consumer }
 
@@ -80,7 +81,7 @@ contract StakeholderRegistry is Ownable {
      * @return The role associated with the stakeholder.
      */
     function getRole(address _stakeholder) external view returns (Role) {
-        //TODO check _stakeholder exists
+        // Optional: Check if the stakeholder exists.
         return stakeholders[_stakeholder].role;
     }
 
@@ -154,4 +155,14 @@ contract StakeholderRegistry is Ownable {
     function getAllStakeholders() external view returns (address[] memory) {
         return registeredAddresses;
     }
+
+    /**
+     * @notice Returns the stakeholder type as a string for the given address.
+     * @param _stakeholder The address of the stakeholder.
+     * @return A string representing the stakeholder type.
+     */
+    function getStakeholderType(address _stakeholder) external view returns (uint256) {
+    require(stakeholders[_stakeholder].exists, "Stakeholder not registered");
+    return uint256(stakeholders[_stakeholder].role);
+}
 }

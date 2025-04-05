@@ -9,6 +9,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * @dev Manages the creation, transfer, and tracking of product NFTs in the supply chain.
  */
 contract ProductManager is ERC721, Ownable {
+
+    
     // Simple counter variable for unique product IDs
     uint256 private _productCounter;
 
@@ -144,5 +146,26 @@ contract ProductManager is ERC721, Ownable {
         prod.updatedAt = block.timestamp;
 
         emit ProductMetadataUpdated(_productId, oldMetadata, _newMetadataURI);
+    }
+
+    function getProductsByOwner(address owner) public view returns (uint256[] memory) {
+        uint256 count = 0;
+        // Count how many products are owned by the given address.
+        for (uint256 i = 1; i <= _productCounter; i++) {
+            if (products[i].currentOwner == owner) {
+                count++;
+            }
+        }
+        
+        // Allocate an array of the correct size.
+        uint256[] memory result = new uint256[](count);
+        uint256 index = 0;
+        for (uint256 i = 1; i <= _productCounter; i++) {
+            if (products[i].currentOwner == owner) {
+                result[index] = i;
+                index++;
+            }
+        }
+        return result;
     }
 }
