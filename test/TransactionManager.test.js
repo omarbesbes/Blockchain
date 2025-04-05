@@ -16,58 +16,66 @@ describe("TransactionManager", function () {
   // Roles: None = 0, Supplier = 1, Factory = 2, Distributor = 3, Retailer = 4, Consumer = 5.
   const Role = { None: 0, Supplier: 1, Factory: 2, Distributor: 3, Retailer: 4, Consumer: 5 };
 
-  async function getEvent(tx, eventTag, contract) { 
+  async function getEvent(tx, eventTag, contract) {
     const receipt = await tx.wait();
     const iface = contract.interface;
     let parsedEvent;
     for (const log of receipt.logs) {
       try {
         const parsed = iface.parseLog(log);
-        if (parsed.name === eventTag) { 
+        if (parsed.name === eventTag) {
           parsedEvent = parsed;
           break;
         }
       } catch (error) {
-        // Log doesn't belong to contract, skip.
+        // Not this contract’s log, skip
       }
     }
     if (!parsedEvent) {
-      throw new Error("Event not found"); 
+      throw new Error(`Event ${eventTag} not found`);
     }
     return parsedEvent;
   }
 
   beforeEach(async function () {
-    [owner, supplier, factory, distributor, retailer, consumer, other] = await ethers.getSigners();
+    [
+      owner,
+      supplier,
+      factory,
+      distributor,
+      retailer,
+      consumer,
+      other
+    ] = await ethers.getSigners();
 
-    // Deploy and set up StakeholderRegistry.
+    // 1. Deploy and set up StakeholderRegistry
     StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
     registry = await StakeholderRegistry.deploy();
     await registry.waitForDeployment();
 
-    // Register stakeholders with their respective roles.
+    // 2. Register stakeholders with their respective roles
     await registry.connect(supplier).registerStakeholder(Role.Supplier, "ipfs://supplier");
     await registry.connect(factory).registerStakeholder(Role.Factory, "ipfs://factory");
     await registry.connect(distributor).registerStakeholder(Role.Distributor, "ipfs://distributor");
     await registry.connect(retailer).registerStakeholder(Role.Retailer, "ipfs://retailer");
     await registry.connect(consumer).registerStakeholder(Role.Consumer, "ipfs://consumer");
 
-    // Deploy ProductManager.
+    // 3. Deploy ProductManager
     ProductManager = await ethers.getContractFactory("ProductManager");
     productManager = await ProductManager.deploy();
     await productManager.waitForDeployment();
 
-    // Deploy a dummy DisputeManager (required for ScoreEngine).
+    // 4. Deploy DisputeManager (dummy for ScoreEngine)
     DisputeManager = await ethers.getContractFactory("DisputeManager");
     disputeManager = await DisputeManager.deploy(await registry.getAddress());
     await disputeManager.waitForDeployment();
 
-    // Deploy Token.
+    // 5. Deploy Token
     Token = await ethers.getContractFactory("Token");
     token = await Token.deploy();
     await token.waitForDeployment();
 
-    // Deploy ScoreEngine.
+    // 6. Deploy ScoreEngine
     ScoreEngine = await ethers.getContractFactory("ScoreEngine");
     scoreEngine = await ScoreEngine.deploy(
       await registry.getAddress(),
@@ -76,16 +84,18 @@ describe("TransactionManager", function () {
       await productManager.getAddress()
     );
     await scoreEngine.waitForDeployment();
-    // Transfer tokens to ScoreEngine if needed.
-    await token.transfer(await factory.getAddress(), ethers.parseUnits("1000", "ether"));
 
-    // In real chain of events only the factory would need to charge its account with tokens.
-    await token.transfer(await scoreEngine.getAddress(), ethers.parseUnits("1000", "ether"));
-    await token.transfer(await supplier.getAddress(), ethers.parseUnits("1000", "ether"));
+    // 7. Distribute tokens
+    await token.transfer(await factory.getAddress(), ethers.parseUnits("1000", "ether"));
     await token.transfer(await distributor.getAddress(), ethers.parseUnits("1000", "ether"));
     await token.transfer(await retailer.getAddress(), ethers.parseUnits("1000", "ether"));
+    await token.transfer(await consumer.getAddress(), ethers.parseUnits("1000", "ether"));
+    // Also fund ScoreEngine a bit
+    await token.transfer(await scoreEngine.getAddress(), ethers.parseUnits("1000", "ether"));
+    // Supplier also gets some tokens if needed
+    await token.transfer(await supplier.getAddress(), ethers.parseUnits("1000", "ether"));
 
-    // Deploy TransactionManager with the addresses of registry, productManager, scoreEngine, and token.
+    // 8. Deploy TransactionManager
     TransactionManager = await ethers.getContractFactory("TransactionManager");
     transactionManager = await TransactionManager.deploy(
       await registry.getAddress(),
@@ -94,311 +104,410 @@ describe("TransactionManager", function () {
       await token.getAddress()
     );
     await transactionManager.waitForDeployment();
-
-    // For Retailer -> Consumer sales, ensure the retailer approves TransactionManager to spend REWARD_AMOUNT tokens.
-    await token.connect(retailer).approve(transactionManager.getAddress(), REWARD_AMOUNT);
   });
 
-  describe("recordSellOperation (non-factory sale)", function () {
-    it("records a valid Supplier -> Factory sale without deposit", async function () {
-      // Supplier (role 1) sells to Factory (role 2): no deposit required.
-      const tx = await transactionManager.connect(supplier).recordSellOperation(await factory.getAddress());
-      const event = await getEvent(tx, "SellOperationRecorded", transactionManager);
-      expect(event).to.not.be.undefined;
-      const { seller, buyer, productId } = event.args;
-      expect(seller).to.equal(await supplier.getAddress());
-      expect(buyer).to.equal(await factory.getAddress());
-      expect(productId).to.equal(0);
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(0); // Pending
-    });
-
-    it("records a valid Distributor -> Retailer sale with deposit", async function () {
-      // Distributor (role 3) sells to Retailer (role 4): deposit required.
-      await token.connect(distributor).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-      const tx = await transactionManager.connect(distributor).recordSellOperation(await retailer.getAddress());
-      const event = await getEvent(tx, "SellOperationRecorded", transactionManager);
-      expect(event).to.not.be.undefined;
-      const { seller, buyer, productId } = event.args;
-      expect(seller).to.equal(await distributor.getAddress());
-      expect(buyer).to.equal(await retailer.getAddress());
-      expect(productId).to.equal(0);
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(0); // Pending
-    });
-
-    it("records a valid Retailer -> Consumer sale without deposit", async function () {
-      // Retailer (role 4) sells to Consumer (role 5): no deposit required.
-      const tx = await transactionManager.connect(retailer).recordSellOperation(await consumer.getAddress());
-      const event = await getEvent(tx, "SellOperationRecorded", transactionManager);
-      expect(event).to.not.be.undefined;
-      const { seller, buyer, productId } = event.args;
-      expect(seller).to.equal(await retailer.getAddress());
-      expect(buyer).to.equal(await consumer.getAddress());
-      expect(productId).to.equal(0);
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(0); // Pending
-    });
-
-    it("reverts for an invalid seller-buyer combination", async function () {
-      // For example, Distributor (role 3) → Factory (role 2) is not allowed.
-      await expect(
-        transactionManager.connect(distributor).recordSellOperation(await factory.getAddress())
-      ).to.be.revertedWith("Invalid seller-buyer role combination for non-factory sale");
-    });
-  });
-
-  describe("recordFactorySellOperation (factory sale)", function () {
-    it("records a valid Factory -> Distributor sale with deposit and transfers NFT", async function () {
-      // Factory must first mint an NFT.
-      const metadataURI = "ipfs://product1";
-      const mintTx = await productManager.connect(factory).mintProduct(metadataURI);
-      const mintEvent = await getEvent(mintTx, "ProductMinted", productManager);
-      const productId = mintEvent.args.productId;
-
-      // Verify factory is the current owner.
-      let productDetails = await productManager.getProductDetails(productId);
-      expect(productDetails.currentOwner).to.equal(await factory.getAddress());
-
-      // For Factory -> Distributor sale, deposit is required.
-      await token.connect(factory).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-      // Factory sells to Distributor.
-      const tx = await transactionManager.connect(factory).recordFactorySellOperation(await distributor.getAddress(), productId);
-      const event = await getEvent(tx, "SellOperationRecorded", transactionManager);
-      expect(event).to.not.be.undefined;
-      const { seller, buyer, productId: eventProductId } = event.args;
-      expect(seller).to.equal(await factory.getAddress());
-      expect(buyer).to.equal(await distributor.getAddress());
-      expect(eventProductId).to.equal(productId);
-
-      // Check that NFT ownership has transferred.
-      productDetails = await productManager.getProductDetails(productId);
-      expect(productDetails.currentOwner).to.equal(await distributor.getAddress());
-    });
-
-    it("records a valid Factory -> Consumer sale without deposit and transfers NFT", async function () {
-      const metadataURI = "ipfs://product2";
-      const mintTx = await productManager.connect(factory).mintProduct(metadataURI);
-      const mintEvent = await getEvent(mintTx, "ProductMinted", productManager);
-      const productId = mintEvent.args.productId;
-
-      let productDetails = await productManager.getProductDetails(productId);
-      expect(productDetails.currentOwner).to.equal(await factory.getAddress());
-
-      // Factory sells to Consumer with no deposit.
-      const tx = await transactionManager.connect(factory).recordFactorySellOperation(await consumer.getAddress(), productId);
-      const event = await getEvent(tx, "SellOperationRecorded", transactionManager);
-      expect(event).to.not.be.undefined;
-      const { seller, buyer, productId: eventProductId } = event.args;
-      expect(seller).to.equal(await factory.getAddress());
-      expect(buyer).to.equal(await consumer.getAddress());
-      expect(eventProductId).to.equal(productId);
-
-      productDetails = await productManager.getProductDetails(productId);
-      expect(productDetails.currentOwner).to.equal(await consumer.getAddress());
-    });
-
-    it("reverts if a non-factory calls recordFactorySellOperation", async function () {
-      const metadataURI = "ipfs://product3";
-      const mintTx = await productManager.connect(factory).mintProduct(metadataURI);
-      const mintEvent = await getEvent(mintTx, "ProductMinted", productManager);
-      const productId = mintEvent.args.productId;
-
-      await expect(
-        transactionManager.connect(supplier).recordFactorySellOperation(await consumer.getAddress(), productId)
-      ).to.be.revertedWith("Seller must be a Factory");
-    });
-
-    it("reverts if buyer role is invalid for factory sale", async function () {
-      const metadataURI = "ipfs://product4";
-      const mintTx = await productManager.connect(factory).mintProduct(metadataURI);
-      const mintEvent = await getEvent(mintTx, "ProductMinted", productManager);
-      const productId = mintEvent.args.productId;
-
-      // Attempt to sell to a Retailer (role 4) which is not allowed.
-      await expect(
-        transactionManager.connect(factory).recordFactorySellOperation(await retailer.getAddress(), productId)
-      ).to.be.revertedWith("Buyer must be Distributor or Consumer for factory sale");
-    });
-  });
-
-  describe("confirmBuyOperation", function () {
-    it("allows the buyer to confirm a Distributor -> Retailer sale and receive the deposit", async function () {
-      // Set up a Distributor -> Retailer sale.
-      await token.connect(distributor).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-      const txSell = await transactionManager.connect(distributor).recordSellOperation(await retailer.getAddress());
-      await txSell.wait();
-
-      const initialTokenBalance = await token.balanceOf(await retailer.getAddress());
-      // Retailer confirms the sale.
-      const txConfirm = await transactionManager.connect(retailer).confirmBuyOperation(1);
-      await txConfirm.wait();
-      const finalTokenBalance = await token.balanceOf(await retailer.getAddress());
-      expect(finalTokenBalance-(initialTokenBalance)).to.equal(REWARD_AMOUNT);
-      
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(1); // Validated
-    });
-
-    it("allows the buyer to confirm a Retailer -> Consumer sale and transfer token reward", async function () {
-      // Set up a Retailer -> Consumer sale.
-      // Ensure retailer has approved the TransactionManager already in beforeEach.
-      const initialRetailerTokenBalance = await token.balanceOf(await retailer.getAddress());
-      const initialScoreEngineTokenBalance = await token.balanceOf(await scoreEngine.getAddress());
-
-      const txSell = await transactionManager.connect(retailer).recordSellOperation(await consumer.getAddress());
-      await txSell.wait();
-
-      await transactionManager.connect(consumer).confirmBuyOperation(1);
-
-      const finalRetailerTokenBalance = await token.balanceOf(await retailer.getAddress());
-      const finalScoreEngineTokenBalance = await token.balanceOf(await scoreEngine.getAddress());
-      expect(initialRetailerTokenBalance-(finalRetailerTokenBalance)).to.equal(REWARD_AMOUNT);
-      expect(finalScoreEngineTokenBalance-(initialScoreEngineTokenBalance)).to.equal(REWARD_AMOUNT);
-      
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(1); // Validated
-    });
-
-    it("allows the buyer to confirm a Factory -> Distributor sale and receive the deposit", async function () {
-      // Set up a Factory -> Distributor sale.
-      const metadataURI = "ipfs://product5";
-      const mintTx = await productManager.connect(factory).mintProduct(metadataURI);
-      const mintEvent = await getEvent(mintTx, "ProductMinted", productManager);
-      const productId = mintEvent.args.productId;
-      
-      await token.connect(factory).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-      const txSell = await transactionManager.connect(factory).recordFactorySellOperation(await distributor.getAddress(), productId);
-      await txSell.wait();
-
-      const initialDistributorTokenBalance = await token.balanceOf(await distributor.getAddress());
-      const txConfirm = await transactionManager.connect(distributor).confirmBuyOperation(1);
-      await txConfirm.wait();
-      const finalDistributorTokenBalance = await token.balanceOf(await distributor.getAddress());
-      expect(finalDistributorTokenBalance-(initialDistributorTokenBalance)).to.equal(REWARD_AMOUNT);
-      
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(1); // Validated
-    });
-
-    it("reverts if confirmBuyOperation is called by a non-designated buyer", async function () {
-      const txSell = await transactionManager.connect(supplier).recordSellOperation(await factory.getAddress());
-      await txSell.wait();
-      await expect(
-        transactionManager.connect(consumer).confirmBuyOperation(1)
-      ).to.be.revertedWith("Only designated buyer can confirm purchase");
-    });
-  });
-
-  describe("buyerRateSeller", function () {
-    it("allows a Factory (buyer) to rate a Supplier (seller)", async function () {
-      // Setup a Supplier -> Factory sale.
-      const txSell = await transactionManager.connect(supplier).recordSellOperation(await factory.getAddress());
-      await txSell.wait();
-      await transactionManager.connect(factory).confirmBuyOperation(1);
-
-      // Factory rates Supplier.
-      const txRate = await transactionManager.connect(factory).buyerRateSeller(1, 0, 8, 0);
-      const event = await getEvent(txRate, "SellerRated", transactionManager);
-      expect(event).to.not.be.undefined;
+  //
+  // ============================================================================
+  // 1) recordBuyOperation with productId=0: e.g., "Supplier -> Factory"
+  //    or "Distributor -> Retailer" or "Consumer -> Retailer" for items with no NFT
+  // ============================================================================
+  //
+  describe("recordBuyOperation (no NFT minted, productId=0)", function () {
+    it("records a valid Supplier -> Factory purchase (factory is buyer, supplier is seller)", async function () {
+      // Buyer = factory(2), Seller = supplier(1). (2 - 1 = 1) => valid.
+      const tx = await transactionManager
+        .connect(factory)
+        .recordBuyOperation(await supplier.getAddress(), 0);
+      const event = await getEvent(tx, "BuyOperationRecorded", transactionManager);
       expect(event.args.buyer).to.equal(await factory.getAddress());
       expect(event.args.seller).to.equal(await supplier.getAddress());
+      expect(event.args.productId).to.equal(0);
+
       const txn = await transactionManager.transactions(1);
-      expect(txn.rated).to.equal(true);
+      expect(txn.status).to.equal(0); // Pending
     });
 
-    it("allows a Retailer (buyer) to rate a Distributor (seller)", async function () {
-      // Setup a Distributor -> Retailer sale.
-      await token.connect(distributor).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-      const txSell = await transactionManager.connect(distributor).recordSellOperation(await retailer.getAddress());
-      await txSell.wait();
-      await transactionManager.connect(retailer).confirmBuyOperation(1);
-
-      // Retailer rates Distributor.
-      const txRate = await transactionManager.connect(retailer).buyerRateSeller(1, 6, 7, 0); // rate packaging
-      const event = await getEvent(txRate, "SellerRated", transactionManager);
-      expect(event).to.not.be.undefined;
+    it("records a valid Retailer -> Distributor purchase (retailer is buyer, distributor is seller)", async function () {
+      // Buyer=retailer(4), Seller=distributor(3). (4 - 3=1) => valid
+      const tx = await transactionManager
+        .connect(retailer)
+        .recordBuyOperation(await distributor.getAddress(), 0);
+      const event = await getEvent(tx, "BuyOperationRecorded", transactionManager);
       expect(event.args.buyer).to.equal(await retailer.getAddress());
       expect(event.args.seller).to.equal(await distributor.getAddress());
+      expect(event.args.productId).to.equal(0);
+
       const txn = await transactionManager.transactions(1);
-      expect(txn.rated).to.equal(true);
+      expect(txn.status).to.equal(0); // Pending
     });
 
-    it("allows a Consumer (buyer) to rate a Retailer (seller)", async function () {
-      // Setup a Retailer -> Consumer sale.
-      const txSell = await transactionManager.connect(retailer).recordSellOperation(await consumer.getAddress());
-      await txSell.wait();
-      await transactionManager.connect(consumer).confirmBuyOperation(1);
-
-      // Consumer rates Retailer.
-      const txRate = await transactionManager.connect(consumer).buyerRateSeller(1, 10, 9, 0); // rate price fairness
-      const event = await getEvent(txRate, "SellerRated", transactionManager);
-      expect(event).to.not.be.undefined;
+    it("records a valid Consumer -> Retailer purchase (consumer is buyer, retailer is seller)", async function () {
+      // Buyer=consumer(5), Seller=retailer(4). (5 - 4=1) => valid
+      const tx = await transactionManager
+        .connect(consumer)
+        .recordBuyOperation(await retailer.getAddress(), 0);
+      const event = await getEvent(tx, "BuyOperationRecorded", transactionManager);
       expect(event.args.buyer).to.equal(await consumer.getAddress());
       expect(event.args.seller).to.equal(await retailer.getAddress());
+      expect(event.args.productId).to.equal(0);
+
       const txn = await transactionManager.transactions(1);
-      expect(txn.rated).to.equal(true);
+      expect(txn.status).to.equal(0); // Pending
     });
 
-    it("allows a Consumer to rate a Factory when owning the NFT", async function () {
-      // Setup a Factory -> Consumer sale.
-      const metadataURI = "ipfs://product6";
-      const mintTx = await productManager.connect(factory).mintProduct(metadataURI);
-      const mintEvent = await getEvent(mintTx, "ProductMinted", productManager);
-      const productId = mintEvent.args.productId;
-
-      const txSell = await transactionManager.connect(factory).recordFactorySellOperation(await consumer.getAddress(), productId);
-      await txSell.wait();
-      await transactionManager.connect(consumer).confirmBuyOperation(1);
-
-      // Consumer rates Factory, providing the productId for NFT ownership verification.
-      const txRate = await transactionManager.connect(consumer).buyerRateSeller(1, 5, 10, productId); // eco rating
-      const event = await getEvent(txRate, "SellerRated", transactionManager);
-      expect(event).to.not.be.undefined;
-      expect(event.args.buyer).to.equal(await consumer.getAddress());
-      expect(event.args.seller).to.equal(await factory.getAddress());
-      const txn = await transactionManager.transactions(1);
-      expect(txn.rated).to.equal(true);
-    });
-
-    it("reverts if buyerRateSeller is called by a non-buyer", async function () {
-      const txSell = await transactionManager.connect(supplier).recordSellOperation(await factory.getAddress());
-      await txSell.wait();
-      await transactionManager.connect(factory).confirmBuyOperation(1);
+    it("reverts for an invalid buyer-seller combination (e.g. Factory->Distributor) for productId=0", async function () {
+      // Buyer=factory(2), Seller=distributor(3) => (2 -3 != 1) => revert
       await expect(
-        transactionManager.connect(consumer).buyerRateSeller(1, 4, 8, 0) // warranty rating
+        transactionManager.connect(factory).recordBuyOperation(
+          await distributor.getAddress(),
+          0
+        )
+      ).to.be.revertedWith("Invalid buyer-seller role combination for non-factory transaction");
+    });
+  });
+
+  //
+  // ============================================================================
+  // 2) recordBuyOperation WITH an actual minted NFT: e.g. "Factory->Distributor"
+  //    The Factory is the product owner, the Distributor is the buyer.
+  // ============================================================================
+  //
+  describe("recordBuyOperation (factory-owned NFT scenario)", function () {
+    let mintedProductId;
+
+    beforeEach(async function () {
+      // Factory mints an NFT
+      const txMint = await productManager
+        .connect(factory)
+        .mintProduct("ipfs://factory-nft");
+      const eventMint = await getEvent(txMint, "ProductMinted", productManager);
+      mintedProductId = eventMint.args.productId;
+
+      const productDetails = await productManager.getProductDetails(mintedProductId);
+      expect(productDetails.currentOwner).to.equal(await factory.getAddress());
+    });
+
+    it("records a valid Factory -> Distributor purchase (buyer=distributor, seller=factory)", async function () {
+      // Buyer=distributor(3), Seller=factory(2). (3 -2=1) => allowed for minted product
+      const tx = await transactionManager
+        .connect(distributor)
+        .recordBuyOperation(await factory.getAddress(), mintedProductId);
+
+      const event = await getEvent(tx, "BuyOperationRecorded", transactionManager);
+      expect(event.args.buyer).to.equal(await distributor.getAddress());
+      expect(event.args.seller).to.equal(await factory.getAddress());
+      expect(event.args.productId).to.equal(mintedProductId);
+
+      // Ownership doesn't change until confirmSellOperation
+      const productDetails = await productManager.getProductDetails(mintedProductId);
+      expect(productDetails.currentOwner).to.equal(await factory.getAddress());
+    });
+
+    it("reverts if the consumer tries to buy directly from the factory for a minted NFT", async function () {
+      // Buyer=consumer(5), Seller=factory(2) => (5 -2=3 !=1), so it should revert
+      await expect(
+        transactionManager
+          .connect(consumer)
+          .recordBuyOperation(await factory.getAddress(), mintedProductId)
+      ).to.be.revertedWith("Invalid buyer-seller role combination for non-factory transaction");
+    });
+  });
+
+  //
+  // ============================================================================
+  // 3) confirmSellOperation
+  // ============================================================================
+  //
+  describe("confirmSellOperation", function () {
+    it("allows seller (distributor) to confirm a sale to retailer, transferring deposit from distributor->retailer", async function () {
+      // 1) Retailer->Distributor purchase with productId=0
+      const txBuy = await transactionManager
+        .connect(retailer)
+        .recordBuyOperation(await distributor.getAddress(), 0);
+      await txBuy.wait();
+
+      // 2) Distributor approves deposit and confirms
+      await token.connect(distributor).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+      const initialRetailerBalance = await token.balanceOf(await retailer.getAddress());
+
+      const txConfirm = await transactionManager.connect(distributor).confirmSellOperation(1);
+      await txConfirm.wait();
+
+      const finalRetailerBalance = await token.balanceOf(await retailer.getAddress());
+      expect(finalRetailerBalance-(initialRetailerBalance)).to.equal(REWARD_AMOUNT);
+
+      const txn = await transactionManager.transactions(1);
+      expect(txn.status).to.equal(1); // Validated
+    });
+
+    it("allows seller (retailer) to confirm a sale to consumer, depositing tokens to ScoreEngine", async function () {
+      // 1) Consumer->Retailer purchase with productId=0
+      const txBuy = await transactionManager
+        .connect(consumer)
+        .recordBuyOperation(await retailer.getAddress(), 0);
+      await txBuy.wait();
+
+      // 2) Retailer approves deposit and confirms
+      await token.connect(retailer).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+      const initialScoreEngineBalance = await token.balanceOf(await scoreEngine.getAddress());
+
+      await transactionManager.connect(retailer).confirmSellOperation(1);
+
+      const finalScoreEngineBalance = await token.balanceOf(await scoreEngine.getAddress());
+      expect(finalScoreEngineBalance-(initialScoreEngineBalance)).to.equal(REWARD_AMOUNT);
+
+      const txn = await transactionManager.transactions(1);
+      expect(txn.status).to.equal(1); // Validated
+    });
+
+    it("allows seller (factory) to confirm a sale to distributor (minted product), deposit from factory->distributor", async function () {
+      // Factory mints an NFT
+      const txMint = await productManager.connect(factory).mintProduct("ipfs://product5");
+      const eventMint = await getEvent(txMint, "ProductMinted", productManager);
+      const productId = eventMint.args.productId;
+
+      // Buyer=distributor(3), Seller=factory(2)
+      const txBuy = await transactionManager
+        .connect(distributor)
+        .recordBuyOperation(await factory.getAddress(), productId);
+      await txBuy.wait();
+
+      // Factory approves deposit
+      await token.connect(factory).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+      const initialDistBalance = await token.balanceOf(await distributor.getAddress());
+
+      // Confirm
+      const txConfirm = await transactionManager.connect(factory).confirmSellOperation(1);
+      await txConfirm.wait();
+
+      // Check deposit
+      const finalDistBalance = await token.balanceOf(await distributor.getAddress());
+      expect(finalDistBalance-(initialDistBalance)).to.equal(REWARD_AMOUNT);
+
+      // Check NFT transfer
+      const productDetails = await productManager.getProductDetails(productId);
+      expect(productDetails.currentOwner).to.equal(await distributor.getAddress());
+
+      const txn = await transactionManager.transactions(1);
+      expect(txn.status).to.equal(1); // Validated
+    });
+
+    it("reverts if confirmSellOperation is called by a non-designated seller", async function () {
+      // Buyer=factory, Seller=supplier => transaction #1
+      const txBuy = await transactionManager
+        .connect(factory)
+        .recordBuyOperation(await supplier.getAddress(), 0);
+      await txBuy.wait();
+
+      // Now consumer tries to confirm (not the seller)
+      await expect(
+        transactionManager.connect(consumer).confirmSellOperation(1)
+      ).to.be.revertedWith("Only designated seller can confirm sale");
+    });
+  });
+
+  //
+  // ============================================================================
+  // 4) buyerRateSeller
+  // ============================================================================
+  //
+  describe("buyerRateSeller", function () {
+    it("allows Factory (buyer) to rate Supplier (seller) for a raw-material (productId=0) purchase", async function () {
+      // Buyer=factory(2), Seller=supplier(1)
+      const txBuy = await transactionManager
+        .connect(factory)
+        .recordBuyOperation(await supplier.getAddress(), 0);
+      await txBuy.wait();
+
+      // Supplier confirms
+      await transactionManager.connect(supplier).confirmSellOperation(1);
+
+      // Factory rates Supplier
+      const txRate = await transactionManager
+        .connect(factory)
+        .buyerRateSeller(1, /*scoreType=*/0, /*scoreValue=*/8, /*productId=*/0, /*ratingFactory=*/false);
+      const event = await getEvent(txRate, "SellerRated", transactionManager);
+
+      expect(event.args.buyer).to.equal(await factory.getAddress());
+      expect(event.args.seller).to.equal(await supplier.getAddress());
+
+      const txn = await transactionManager.transactions(1);
+      expect(txn.rated).to.equal(true);
+    });
+
+    it("allows Retailer (buyer) to rate Distributor (seller)", async function () {
+      // Buyer=retailer(4), Seller=distributor(3)
+      const txBuy = await transactionManager
+        .connect(retailer)
+        .recordBuyOperation(await distributor.getAddress(), 0);
+      await txBuy.wait();
+
+      // Distributor approves deposit and confirms
+      await token.connect(distributor).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+      await transactionManager.connect(distributor).confirmSellOperation(1);
+
+      // Retailer rates Distributor
+      const txRate = await transactionManager
+        .connect(retailer)
+        .buyerRateSeller(1, /*scoreType=*/6, /*scoreValue=*/7, /*productId=*/0, /*ratingFactory=*/false);
+      const event = await getEvent(txRate, "SellerRated", transactionManager);
+
+      expect(event.args.buyer).to.equal(await retailer.getAddress());
+      expect(event.args.seller).to.equal(await distributor.getAddress());
+
+      const txn = await transactionManager.transactions(1);
+      expect(txn.rated).to.equal(true);
+    });
+
+    it("allows Consumer (buyer) to rate Retailer (seller)", async function () {
+      // Buyer=consumer(5), Seller=retailer(4)
+      const txBuy = await transactionManager
+        .connect(consumer)
+        .recordBuyOperation(await retailer.getAddress(), 0);
+      await txBuy.wait();
+
+      // Retailer approves deposit and confirms
+      await token.connect(retailer).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+      await transactionManager.connect(retailer).confirmSellOperation(1);
+
+      // Consumer rates Retailer
+      const txRate = await transactionManager
+        .connect(consumer)
+        .buyerRateSeller(1, /*scoreType=*/10, /*scoreValue=*/9, 0, false);
+      const event = await getEvent(txRate, "SellerRated", transactionManager);
+
+      expect(event.args.buyer).to.equal(await consumer.getAddress());
+      expect(event.args.seller).to.equal(await retailer.getAddress());
+
+      const txn = await transactionManager.transactions(1);
+      expect(txn.rated).to.equal(true);
+    });
+
+    it("reverts if a non-buyer calls buyerRateSeller", async function () {
+      // Buyer=factory(2), Seller=supplier(1)
+      const txBuy = await transactionManager
+        .connect(factory)
+        .recordBuyOperation(await supplier.getAddress(), 0);
+      await txBuy.wait();
+      await transactionManager.connect(supplier).confirmSellOperation(1);
+
+      // consumer tries to rate (not the buyer)
+      await expect(
+        transactionManager.connect(consumer).buyerRateSeller(1, 0, 8, 0, false)
       ).to.be.revertedWith("Only buyer can rate the seller");
     });
 
-    it("reverts if buyerRateSeller is called before the transaction is validated", async function () {
-      const txSell = await transactionManager.connect(supplier).recordSellOperation(await factory.getAddress());
-      await txSell.wait();
+    it("reverts if the transaction is not validated yet", async function () {
+      // Buyer=factory(2), Seller=supplier(1)
+      const txBuy = await transactionManager
+        .connect(factory)
+        .recordBuyOperation(await supplier.getAddress(), 0);
+      await txBuy.wait();
+
+      // No confirmSellOperation yet
       await expect(
-        transactionManager.connect(factory).buyerRateSeller(1, 0, 8, 0) // trust rating
+        transactionManager.connect(factory).buyerRateSeller(1, 0, 8, 0, false)
       ).to.be.revertedWith("Transaction not validated");
     });
 
-    it("reverts if buyerRateSeller is called a second time on the same transaction", async function () {
-      const txSell = await transactionManager.connect(supplier).recordSellOperation(await factory.getAddress());
-      await txSell.wait();
-      await transactionManager.connect(factory).confirmBuyOperation(1);
-      await transactionManager.connect(factory).buyerRateSeller(1, 0, 8, 0); // trust rating
+    it("reverts if buyer tries to rate the same seller a second time in the same transaction", async function () {
+      // Buyer=factory(2), Seller=supplier(1)
+      const txBuy = await transactionManager
+        .connect(factory)
+        .recordBuyOperation(await supplier.getAddress(), 0);
+      await txBuy.wait();
+      await transactionManager.connect(supplier).confirmSellOperation(1);
+
+      // 1st rating
+      await transactionManager
+        .connect(factory)
+        .buyerRateSeller(1, 0, 8, 0, false);
+
+      // 2nd rating attempt
       await expect(
-        transactionManager.connect(factory).buyerRateSeller(1, 0, 7, 0) // trust rating
+        transactionManager.connect(factory).buyerRateSeller(1, 0, 7, 0, false)
       ).to.be.revertedWith("Seller already rated for this transaction");
     });
 
-    it("reverts if rating is not allowed for the given role combination", async function () {
-      // Setup: Supplier -> Factory sale.
-      const txSell = await transactionManager.connect(supplier).recordSellOperation(await factory.getAddress());
-      await txSell.wait();
-      await transactionManager.connect(factory).confirmBuyOperation(1);
-      
-      // In this case, although Factory (buyer) is allowed to rate Supplier,
-      // we simulate an invalid combination by having Supplier try to rate Factory.
+    it("reverts if the roles do not match an allowed buyer-seller rating scenario", async function () {
+      // e.g., Supplier trying to rate Factory in a transaction where
+      // buyer=Factory, seller=Supplier
+      const txBuy = await transactionManager
+        .connect(factory)
+        .recordBuyOperation(await supplier.getAddress(), 0);
+      await txBuy.wait();
+      await transactionManager.connect(supplier).confirmSellOperation(1);
+
+      // Now seller tries to call buyerRateSeller
       await expect(
-        transactionManager.connect(supplier).buyerRateSeller(1, 3, 8, 0) // PRODUCT_QUALITY rating
+        transactionManager.connect(supplier).buyerRateSeller(1, 3, 8, 0, false)
       ).to.be.revertedWith("Only buyer can rate the seller");
     });
+  });
+
+  //
+  // ============================================================================
+  // 5) End-to-End flow: Factory->Distributor->Retailer->Consumer with an actual NFT
+  //    Then Consumer rates both Retailer (normal) and Factory (ratingFactory=true)
+  // ============================================================================
+  //
+  it("allows a consumer to ultimately rate the factory after the product flows (factory->distributor->retailer->consumer)", async function () {
+    // Step 1: Factory mints a product
+    const txMint = await productManager
+      .connect(factory)
+      .mintProduct("ipfs://factory-product");
+    const eventMint = await getEvent(txMint, "ProductMinted", productManager);
+    const productId = eventMint.args.productId;
+
+    // Step 2: Distributor buys from Factory
+    const txBuy1 = await transactionManager
+      .connect(distributor)
+      .recordBuyOperation(await factory.getAddress(), productId);
+    await txBuy1.wait();
+
+    // Factory approves deposit, confirms
+    await token.connect(factory).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    await transactionManager.connect(factory).confirmSellOperation(1);
+
+    // Product now with Distributor
+
+    // Step 3: Retailer buys from Distributor
+    const txBuy2 = await transactionManager
+      .connect(retailer)
+      .recordBuyOperation(await distributor.getAddress(), productId);
+    await txBuy2.wait();
+
+    // Distributor approves deposit, confirms
+    await token.connect(distributor).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    await transactionManager.connect(distributor).confirmSellOperation(2);
+
+    // Product now with Retailer
+
+    // Step 4: Consumer buys from Retailer
+    const txBuy3 = await transactionManager
+      .connect(consumer)
+      .recordBuyOperation(await retailer.getAddress(), productId);
+    await txBuy3.wait();
+
+    // Retailer approves deposit, confirms
+    await token.connect(retailer).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    await transactionManager.connect(retailer).confirmSellOperation(3);
+
+    // Product now with Consumer
+
+    // Step 5a: Consumer rates the Retailer (normal rating)
+    const txRateRetailer = await transactionManager
+      .connect(consumer)
+      .buyerRateSeller(3, /*scoreType=*/10, /*scoreValue=*/8, /*productId=*/0, /*ratingFactory=*/false);
+    await txRateRetailer.wait();
+
+    // Step 5b: Consumer also rates the Factory (ratingFactory=true)
+    // Must pass the minted productId so the contract can identify the original creator (factory).
+    const txRateFactory = await transactionManager
+      .connect(consumer)
+      .buyerRateSeller(3, /*scoreType=*/5, /*scoreValue=*/9, productId, /*ratingFactory=*/true);
+    const eventRate = await getEvent(txRateFactory, "SellerRated", transactionManager);
+    expect(eventRate.args.buyer).to.equal(await consumer.getAddress());
+    expect(eventRate.args.seller).to.equal(await factory.getAddress());
   });
 });

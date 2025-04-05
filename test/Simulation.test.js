@@ -3,8 +3,7 @@ const { ethers } = require("hardhat");
 
 describe("Network Simulation", function () {
   it("simulates a full network of interactions", async function () {
-    // Get signers: assume the order is as follows:
-    // [deployer, supplier1, supplier2, supplier3, factory1, factory2, distributor1, distributor2, retailer1, retailer2, consumer1,...,consumer10]
+    // Get signers: [deployer, supplier1, supplier2, supplier3, factory1, factory2, distributor1, distributor2, retailer1, retailer2, consumer1,...,consumer10]
     const [
       deployer,
       supplier1,
@@ -18,7 +17,7 @@ describe("Network Simulation", function () {
       retailer2,
       ...consumers
     ] = await ethers.getSigners();
-    // For clarity, alias the first 10 consumers
+    // Alias the first 10 consumers.
     const [
       consumer1,
       consumer2,
@@ -31,28 +30,29 @@ describe("Network Simulation", function () {
       consumer9,
       consumer10
     ] = consumers;
+    
     async function getEvent(tx, eventTag, contract) { 
-        const receipt = await tx.wait();
-        const iface = contract.interface;
-        let parsedEvent;
-        for (const log of receipt.logs) {
-            try {
-            const parsed = iface.parseLog(log);
-            if (parsed.name === eventTag) { 
-                parsedEvent = parsed;
-                break;
-            }
-            } catch (error) {
-            // Log doesn't belong to contract, skip.
-            }
+      const receipt = await tx.wait();
+      const iface = contract.interface;
+      let parsedEvent;
+      for (const log of receipt.logs) {
+        try {
+          const parsed = iface.parseLog(log);
+          if (parsed.name === eventTag) { 
+            parsedEvent = parsed;
+            break;
+          }
+        } catch (error) {
+          // Skip logs that don't belong to this contract.
         }
-        if (!parsedEvent) {
-            throw new Error("Event not found"); 
-        }
-        return parsedEvent;
+      }
+      if (!parsedEvent) {
+        throw new Error("Event not found"); 
+      }
+      return parsedEvent;
     }
 
-    // Deploy the core contracts
+    // Deploy core contracts.
     const StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
     const registry = await StakeholderRegistry.deploy();
     await registry.waitForDeployment();
@@ -87,8 +87,7 @@ describe("Network Simulation", function () {
     );
     await transactionManager.waitForDeployment();
 
-    // Roles: Supplier=1, Factory=2, Distributor=3, Retailer=4, Consumer=5.
-    // Register all stakeholders with their respective roles and a metadata URI.
+    // Register stakeholders.
     await registry.connect(supplier1).registerStakeholder(1, "ipfs://supplier1");
     await registry.connect(supplier2).registerStakeholder(1, "ipfs://supplier2");
     await registry.connect(supplier3).registerStakeholder(1, "ipfs://supplier3");
@@ -113,138 +112,162 @@ describe("Network Simulation", function () {
     await registry.connect(consumer9).registerStakeholder(5, "ipfs://consumer9");
     await registry.connect(consumer10).registerStakeholder(5, "ipfs://consumer10");
 
-    // Fund factories with tokens (only factories get initial tokens)
-    const initialFactoryTokens = ethers.parseUnits("10000", "ether");
-    await token.transfer(await factory1.getAddress(), initialFactoryTokens);
-    await token.transfer(await factory2.getAddress(), initialFactoryTokens);
+    // Fund participants.
+    const initialTokens = ethers.parseUnits("10000", "ether");
+    await token.transfer(await factory1.getAddress(), initialTokens);
+    await token.transfer(await factory2.getAddress(), initialTokens);
+    await token.transfer(await scoreEngine.getAddress(), ethers.parseUnits("1000", "ether"));
+    const stakeholderFunding = ethers.parseUnits("500", "ether");
+    await token.transfer(await distributor1.getAddress(), stakeholderFunding);
+    await token.transfer(await distributor2.getAddress(), stakeholderFunding);
+    await token.transfer(await retailer1.getAddress(), stakeholderFunding);
+    await token.transfer(await retailer2.getAddress(), stakeholderFunding);
+    await token.transfer(await consumer1.getAddress(), stakeholderFunding);
+    await token.transfer(await consumer2.getAddress(), stakeholderFunding);
 
-    // For subsequent deposit-required sales (e.g., Distributor -> Retailer),
-    // transfer tokens from factories to distributors.
-    //const distributorFunding = ethers.parseUnits("500", "ether");
-    //await token.connect(factory1).transfer(await distributor1.getAddress(), distributorFunding);
-    //await token.connect(factory2).transfer(await distributor2.getAddress(), distributorFunding);
-
-    // Define a constant for the reward/deposit amount (from earlier tests, e.g., 10 tokens)
     const REWARD_AMOUNT = ethers.parseUnits("10", "ether");
 
     // ---------------------------
-    // 1. Supplier -> Factory Sales
+    // 1. Factory -> Supplier Purchases (Buyer-Initiated)
     // ---------------------------
-    // Transaction 1: Supplier1 sells to Factory1.
-    let tx = await transactionManager.connect(supplier1).recordSellOperation(await factory1.getAddress());
+    // Transaction 1: Factory1 buys from Supplier1 (no deposit required)
+    let tx = await transactionManager.connect(factory1).recordBuyOperation(await supplier1.getAddress(),0);
     await tx.wait();
-    // Factory1 confirms the sale (assume transaction ID 1).
-    tx = await transactionManager.connect(factory1).confirmBuyOperation(1);
+    tx = await transactionManager.connect(supplier1).confirmSellOperation(1);
     await tx.wait();
-    // Factory1 rates Supplier1 (using rating type 0 (e.g., TRUST) and a score of 8; productId=0 for non-product ratings).
-    tx = await transactionManager.connect(factory1).buyerRateSeller(1, 0, 8, 0);
+    tx = await transactionManager.connect(factory1).buyerRateSeller(1, 0, 8, 0,false);
     await tx.wait();
 
-    // Transaction 2: Supplier2 sells to Factory2.
-    tx = await transactionManager.connect(supplier2).recordSellOperation(await factory2.getAddress());
+    // Transaction 2: Factory2 buys from Supplier2 (no deposit required)
+    tx = await transactionManager.connect(factory2).recordBuyOperation(await supplier2.getAddress(),0);
     await tx.wait();
-    tx = await transactionManager.connect(factory2).confirmBuyOperation(2);
+    tx = await transactionManager.connect(supplier2).confirmSellOperation(2);
     await tx.wait();
-    tx = await transactionManager.connect(factory2).buyerRateSeller(2, 0, 9, 0);
+    tx = await transactionManager.connect(factory2).buyerRateSeller(2, 0, 9, 0,false);
     await tx.wait();
 
-    // Transaction 3: Supplier3 sells to Factory1.
-    tx = await transactionManager.connect(supplier3).recordSellOperation(await factory1.getAddress());
+    // Transaction 3: Factory1 buys from Supplier3 (no deposit required)
+    tx = await transactionManager.connect(factory1).recordBuyOperation(await supplier3.getAddress(),0);
     await tx.wait();
-    tx = await transactionManager.connect(factory1).confirmBuyOperation(3);
+    tx = await transactionManager.connect(supplier3).confirmSellOperation(3);
     await tx.wait();
-    tx = await transactionManager.connect(factory1).buyerRateSeller(3, 0, 7, 0);
+    tx = await transactionManager.connect(factory1).buyerRateSeller(3, 0, 7, 0,false);
     await tx.wait();
 
     // ---------------------------
-    // 2. Factory -> Distributor Sales (Factory mints product & sells)
+    // 2. Distributor -> Factory Purchases (Factory Products)
     // ---------------------------
     // Factory1 mints a product.
     tx = await productManager.connect(factory1).mintProduct("ipfs://product-factory1-1");
-    // Extract the productId from the "ProductMinted" event.
     let productId1 = (await getEvent(tx, "ProductMinted", productManager)).args.productId;
-    // Factory1 must approve TransactionManager for deposit.
+    
+    // Distributor1 buys product from Factory1.
+    tx = await transactionManager.connect(distributor1).recordBuyOperation(await factory1.getAddress(), productId1);
+    await tx.wait();
+    // Seller (Factory1) approves deposit.
     await token.connect(factory1).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-    // Factory1 sells the minted product to Distributor1.
-    tx = await transactionManager.connect(factory1).recordFactorySellOperation(await distributor1.getAddress(), productId1);
+    tx = await transactionManager.connect(factory1).confirmSellOperation(4);
     await tx.wait();
-    // Distributor1 confirms the sale (assume transaction ID 4).
-    tx = await transactionManager.connect(distributor1).confirmBuyOperation(4);
-    await tx.wait();
-    // Distributor1 rates Factory1 (using rating type 3, for example).
-    //tx = await transactionManager.connect(distributor1).buyerRateSeller(4, 3, 8, 0);
-    //await tx.wait();
 
     // Factory2 mints a product.
     tx = await productManager.connect(factory2).mintProduct("ipfs://product-factory2-1");
     let productId2 = (await getEvent(tx, "ProductMinted", productManager)).args.productId;
-    // Factory2 approves and sells the product to Distributor2.
-    await token.connect(factory2).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-    tx = await transactionManager.connect(factory2).recordFactorySellOperation(await distributor2.getAddress(), productId2);
-    await tx.wait();
-    // Distributor2 confirms the sale (assume transaction ID 5).
-    tx = await transactionManager.connect(distributor2).confirmBuyOperation(5);
-    await tx.wait();
-    // Distributor2 rates Factory2.
-    //tx = await transactionManager.connect(distributor2).buyerRateSeller(5, 3, 9, 0);
-    //await tx.wait();
-
-    // ---------------------------
-    // 3. Distributor -> Retailer Sales
-    // ---------------------------
-    // Distributor1 sells to Retailer1 (non-factory sale; deposit required).
-    await token.connect(distributor1).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-    tx = await transactionManager.connect(distributor1).recordSellOperation(await retailer1.getAddress());
-    await tx.wait();
-    // Retailer1 confirms the sale (assume transaction ID 6).
-    tx = await transactionManager.connect(retailer1).confirmBuyOperation(6);
-    await tx.wait();
-    // Retailer1 rates Distributor1 (using rating type 6, e.g., PACKAGING, with a score of 7).
-    tx = await transactionManager.connect(retailer1).buyerRateSeller(6, 6, 7, 0);
-    await tx.wait();
-
-    // Distributor2 sells to Retailer2.
-    await token.connect(distributor2).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-    tx = await transactionManager.connect(distributor2).recordSellOperation(await retailer2.getAddress());
-    await tx.wait();
-    // Retailer2 confirms the sale (assume transaction ID 7).
-    tx = await transactionManager.connect(retailer2).confirmBuyOperation(7);
-    await tx.wait();
-    // Retailer2 rates Distributor2.
-    tx = await transactionManager.connect(retailer2).buyerRateSeller(7, 6, 8, 0);
-    await tx.wait();
-
-    // ---------------------------
-    // 4. Retailer -> Consumer Sales
-    // ---------------------------
-    // Retailer1 sells to Consumer1 (deposit required).
-    await token.connect(retailer1).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-    tx = await transactionManager.connect(retailer1).recordSellOperation(await consumer1.getAddress());
-    await tx.wait();
-    // Consumer1 confirms the sale (assume transaction ID 8).
-    tx = await transactionManager.connect(consumer1).confirmBuyOperation(8);
-    await tx.wait();
-    // Consumer1 rates Retailer1 (using rating type 10, e.g., PRICE_FAIRNESS, with a score of 9).
-    tx = await transactionManager.connect(consumer1).buyerRateSeller(8, 10, 9, 0);
-    await tx.wait();
-
-    // Retailer2 sells to Consumer2.
-    await token.connect(retailer2).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-    tx = await transactionManager.connect(retailer2).recordSellOperation(await consumer2.getAddress());
-    await tx.wait();
-    // Consumer2 confirms the sale (assume transaction ID 9).
-    tx = await transactionManager.connect(consumer2).confirmBuyOperation(9);
-    await tx.wait();
-    // Consumer2 rates Retailer2.
-    tx = await transactionManager.connect(consumer2).buyerRateSeller(9, 10, 8, 0);
-    await tx.wait();
-
-
-    //Missing consumer rates factory on a product
     
-    // (We can add further interactions—for example, additional sales from retailer to remaining consumers,
-    // or even simulate a consumer rating a factory through NFT ownership if applicable.)
+    // Distributor2 buys product from Factory2.
+    tx = await transactionManager.connect(distributor2).recordBuyOperation(await factory2.getAddress(), productId2);
+    await tx.wait();
+    // Seller (Factory2) approves deposit.
+    await token.connect(factory2).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    tx = await transactionManager.connect(factory2).confirmSellOperation(5);
+    await tx.wait();
 
-    // Simulation complete.
+    // ---------------------------
+    // 3. Retailer -> Distributor Purchases (with deposit from seller)
+    // ---------------------------
+    // Retailer1 buys productId1 from Distributor1.
+    tx = await transactionManager.connect(retailer1).recordBuyOperation(await distributor1.getAddress(), productId1);
+    await tx.wait();
+    // Seller (Distributor1) approves deposit.
+    await token.connect(distributor1).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    tx = await transactionManager.connect(distributor1).confirmSellOperation(6);
+    await tx.wait();
+    tx = await transactionManager.connect(retailer1).buyerRateSeller(6, 6, 7, 0,false);
+    await tx.wait();
+
+    // Retailer2 buys from Distributor2.
+    tx = await transactionManager.connect(retailer2).recordBuyOperation(await distributor2.getAddress(), productId2);
+    await tx.wait();
+    // Seller (Distributor2) approves deposit.
+    await token.connect(distributor2).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    tx = await transactionManager.connect(distributor2).confirmSellOperation(7);
+    await tx.wait();
+    tx = await transactionManager.connect(retailer2).buyerRateSeller(7, 6, 8, 0,false);
+    await tx.wait();
+
+    // ---------------------------
+    // 4. Consumer -> Retailer Purchases (with deposit from seller)
+    // ---------------------------
+    // Consumer1 buys from Retailer1.
+    tx = await transactionManager.connect(consumer1).recordBuyOperation(await retailer1.getAddress(), productId1);
+    await tx.wait();
+    // Seller (Retailer1) approves deposit.
+    await token.connect(retailer1).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    tx = await transactionManager.connect(retailer1).confirmSellOperation(8);
+    await tx.wait();
+    tx = await transactionManager.connect(consumer1).buyerRateSeller(8, 10, 9, 0,false);
+    await tx.wait();
+
+    // Consumer2 buys from Retailer2.
+    tx = await transactionManager.connect(consumer2).recordBuyOperation(await retailer2.getAddress(),productId2);
+    await tx.wait();
+    // Seller (Retailer2) approves deposit.
+    await token.connect(retailer2).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    tx = await transactionManager.connect(retailer2).confirmSellOperation(9);
+    await tx.wait();
+    tx = await transactionManager.connect(consumer2).buyerRateSeller(9, 10, 8, 0,false);
+    await tx.wait();
+
+    // 5. Consumer -> Factory Rating (Chain: Distributor -> Factory, then Retailer, then Consumer)
+    // ---------------------------
+    // Factory1 mints a new product.
+    tx = await productManager.connect(factory1).mintProduct("ipfs://product-factory1-special");
+    let specialProductId = (await getEvent(tx, "ProductMinted", productManager)).args.productId;
+
+    // Distributor1 buys the product from Factory1.
+    tx = await transactionManager.connect(distributor1).recordBuyOperation(await factory1.getAddress(), specialProductId);
+    await tx.wait();
+    // Seller (Factory1) approves deposit.
+    await token.connect(factory1).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    tx = await transactionManager.connect(factory1).confirmSellOperation(10);
+    await tx.wait();
+
+    // Retailer1 buys from Distributor1.
+    tx = await transactionManager.connect(retailer1).recordBuyOperation(await distributor1.getAddress(),specialProductId);
+    await tx.wait();
+    // Seller (Distributor1) approves deposit.
+    await token.connect(distributor1).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    tx = await transactionManager.connect(distributor1).confirmSellOperation(11);
+    await tx.wait();
+
+    // Consumer4 buys from Retailer1.
+    tx = await transactionManager.connect(consumer4).recordBuyOperation(await retailer1.getAddress(),specialProductId);
+    await tx.wait();
+    // Seller (Retailer1) approves deposit.
+    await token.connect(retailer1).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    tx = await transactionManager.connect(retailer1).confirmSellOperation(12);
+    await tx.wait();
+
+    // Consumer4 rates Retailer1.
+    tx = await transactionManager.connect(consumer4).buyerRateSeller(12, 10, 8, 0, false);
+    await tx.wait();
+
+    // Consumer4 also rates Factory1 using the ScoreEngine directly.
+    tx = await transactionManager.connect(consumer4).buyerRateSeller(12,5,7,specialProductId,true)
+    await tx.wait();
+
+    // Verify product details.
+    const productDetails = await productManager.getProductDetails(specialProductId);
+    expect(productDetails.creator).to.equal(await factory1.getAddress());
+    expect(productDetails.currentOwner).to.equal(await consumer4.getAddress());
   });
 });
