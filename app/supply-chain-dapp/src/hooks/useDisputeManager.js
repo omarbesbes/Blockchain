@@ -12,8 +12,6 @@ export function useDisputeManager() {
   // For reads (view/pure calls)
   const publicClient = usePublicClient();
 
-  // Write functions now all use walletClient.writeContract
-
   async function initiateDispute(ratingId, respondent, depositAmount) {
     if (!walletClient) throw new Error("No wallet connected");
     const txHash = await walletClient.writeContract({
@@ -52,78 +50,32 @@ export function useDisputeManager() {
     return publicClient.waitForTransactionReceipt({ hash: txHash });
   }
 
-  // New functions for Challenges
+  async function finalizeDispute(disputeId) {
+    if (!walletClient) throw new Error("No wallet connected");
+    const txHash = await walletClient.writeContract({
+      address: disputeManagerAddress,
+      abi: disputeManagerABI,
+      functionName: "finalizeDispute",
+      args: [disputeId],
+      account: walletClient.account,
+    });
+    return publicClient.waitForTransactionReceipt({ hash: txHash });
+  }
 
-  // 1. Get all scores where the given address has been scored.
-  async function getScoresAgainstYou(userAddress) {
+  async function getDisputeDetails(disputeId) {
     return await publicClient.readContract({
       address: disputeManagerAddress,
       abi: disputeManagerABI,
-      functionName: "getScoresAgainstYou",
-      args: [userAddress],
+      functionName: "getDisputeDetails",
+      args: [disputeId],
     });
-  }
-
-  // 2. Challenge a score by initiating a dispute. Deposit amount must be provided.
-  async function challengeScore(scoreId, scorer, depositAmount) {
-    if (!walletClient) throw new Error("No wallet connected");
-    // Assuming we use the same initiateDispute function for challenges,
-    // where scoreId is used as ratingId and scorer is the respondent.
-    const txHash = await walletClient.writeContract({
-      address: disputeManagerAddress,
-      abi: disputeManagerABI,
-      functionName: "initiateDispute",
-      args: [scoreId, scorer],
-      value: depositAmount,
-      account: walletClient.account,
-    });
-    return publicClient.waitForTransactionReceipt({ hash: txHash });
-  }
-
-  // 3. Get ongoing challenges relevant to the user.
-  async function getOngoingChallenges(userAddress) {
-    return await publicClient.readContract({
-      address: disputeManagerAddress,
-      abi: disputeManagerABI,
-      functionName: "getOngoingChallenges",
-      args: [userAddress],
-    });
-  }
-
-  // 4. Acknowledge a challenge (vote in favor of the challenged score).
-  async function acknowledgeChallenge(challengeId) {
-    if (!walletClient) throw new Error("No wallet connected");
-    const txHash = await walletClient.writeContract({
-      address: disputeManagerAddress,
-      abi: disputeManagerABI,
-      functionName: "acknowledgeChallenge",
-      args: [challengeId],
-      account: walletClient.account,
-    });
-    return publicClient.waitForTransactionReceipt({ hash: txHash });
-  }
-
-  // 5. Deny a challenge (vote against the challenged score).
-  async function denyChallenge(challengeId) {
-    if (!walletClient) throw new Error("No wallet connected");
-    const txHash = await walletClient.writeContract({
-      address: disputeManagerAddress,
-      abi: disputeManagerABI,
-      functionName: "denyChallenge",
-      args: [challengeId],
-      account: walletClient.account,
-    });
-    return publicClient.waitForTransactionReceipt({ hash: txHash });
   }
 
   return {
     initiateDispute,
     respondToDispute,
     voteDispute,
-    getScoresAgainstYou,
-    challengeScore,
-    getOngoingChallenges,
-    acknowledgeChallenge,
-    denyChallenge,
+    finalizeDispute,
+    getDisputeDetails,
   };
 }

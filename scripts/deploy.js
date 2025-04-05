@@ -1,34 +1,85 @@
+//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\scripts\deploy.js
 const hre = require("hardhat"); // CommonJS import
 const { ethers } = hre;         // ethers from Hardhat
 
 async function main() {
-  // 1. Deploy StakeholderRegistry
-  const StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
+  let TransactionManager, transactionManager;
+  let StakeholderRegistry, registry;
+  let ProductManager, productManager;
+  let ScoreEngine, scoreEngine;
+  let Token, token;
+  let DisputeManager, disputeManager;
+
+  console.log("=== Starting contract deployment ===");
+
+  // 1. Deploy and set up StakeholderRegistry
   console.log("Deploying StakeholderRegistry...");
-  const stakeholderRegistry = await StakeholderRegistry.deploy();
-  await stakeholderRegistry.waitForDeployment();
-  console.log("StakeholderRegistry deployed to:", stakeholderRegistry.target);
+  StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
+  registry = await StakeholderRegistry.deploy();
+  await registry.waitForDeployment();
+  const registryAddress = await registry.getAddress();
+  console.log(`✅ StakeholderRegistry deployed at: ${registryAddress}`);
 
-  // 2. Deploy DisputeManager (requires registry address)
-  const DisputeManager = await ethers.getContractFactory("DisputeManager");
-  console.log("Deploying DisputeManager...");
-  const disputeManager = await DisputeManager.deploy(stakeholderRegistry.target);
-  await disputeManager.waitForDeployment();
-  console.log("DisputeManager deployed to:", disputeManager.target);
-
-  // 3. Deploy ProductManager (standalone)
-  const ProductManager = await ethers.getContractFactory("ProductManager");
+  // 2. Deploy ProductManager
   console.log("Deploying ProductManager...");
-  const productManager = await ProductManager.deploy();
+  ProductManager = await ethers.getContractFactory("ProductManager");
+  productManager = await ProductManager.deploy();
   await productManager.waitForDeployment();
-  console.log("ProductManager deployed to:", productManager.target);
+  const productManagerAddress = await productManager.getAddress();
+  console.log(`✅ ProductManager deployed at: ${productManagerAddress}`);
 
-  // 4. Deploy ScoreEngine (requires registry + disputeManager)
-  const ScoreEngine = await ethers.getContractFactory("ScoreEngine");
+  // 3. Deploy DisputeManager
+  console.log("Deploying DisputeManager...");
+  DisputeManager = await ethers.getContractFactory("DisputeManager");
+  disputeManager = await DisputeManager.deploy(registryAddress);
+  await disputeManager.waitForDeployment();
+  const disputeManagerAddress = await disputeManager.getAddress();
+  console.log(`✅ DisputeManager deployed at: ${disputeManagerAddress}`);
+
+  // 4. Deploy Token
+  console.log("Deploying Token...");
+  Token = await ethers.getContractFactory("Token");
+  token = await Token.deploy();
+  await token.waitForDeployment();
+  const tokenAddress = await token.getAddress();
+  console.log(`✅ Token deployed at: ${tokenAddress}`);
+
+  // 5. Deploy ScoreEngine
   console.log("Deploying ScoreEngine...");
-  const scoreEngine = await ScoreEngine.deploy(stakeholderRegistry.target, disputeManager.target);
+  ScoreEngine = await ethers.getContractFactory("ScoreEngine");
+  scoreEngine = await ScoreEngine.deploy(
+    registryAddress,
+    disputeManagerAddress,
+    tokenAddress,
+    productManagerAddress
+  );
   await scoreEngine.waitForDeployment();
-  console.log("ScoreEngine deployed to:", scoreEngine.target);
+  const scoreEngineAddress = await scoreEngine.getAddress();
+  console.log(`✅ ScoreEngine deployed at: ${scoreEngineAddress}`);
+
+  // 6. Deploy TransactionManager
+  console.log("Deploying TransactionManager...");
+  TransactionManager = await ethers.getContractFactory("TransactionManager");
+  transactionManager = await TransactionManager.deploy(
+    registryAddress,
+    productManagerAddress,
+    scoreEngineAddress,
+    tokenAddress
+  );
+  await transactionManager.waitForDeployment();
+  const transactionManagerAddress = await transactionManager.getAddress();
+  console.log(`✅ TransactionManager deployed at: ${transactionManagerAddress}`);
+
+  console.log("=== All contracts deployed successfully ===");
+  
+  // Print summary of all deployments
+  console.log("\n=== Contract Deployment Summary ===");
+  console.log(`StakeholderRegistry: ${registryAddress}`);
+  console.log(`ProductManager: ${productManagerAddress}`);
+  console.log(`DisputeManager: ${disputeManagerAddress}`);
+  console.log(`Token: ${tokenAddress}`);
+  console.log(`ScoreEngine: ${scoreEngineAddress}`);
+  console.log(`TransactionManager: ${transactionManagerAddress}`);
 }
 
 // We use a top-level async/await pattern here
