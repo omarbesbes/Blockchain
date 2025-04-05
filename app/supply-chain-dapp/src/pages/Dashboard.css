@@ -105,3 +105,26 @@
   color: #555;
   margin-top: 0.5rem;
 }
+
+/* Token section styling */
+.token-section {
+    /* Inherit common dashboard section styles */
+    /* Additional styling for token section if needed */
+    border: 1px solid #ccc;
+    padding: 1rem;
+    margin-top: 1rem;
+    border-radius: 6px;
+}
+
+.token-buy {
+  display: flex;
+  margin-top: 0.5rem;
+}
+
+.token-buy input {
+  margin-right: 0.5rem;
+}
+
+.token-buy button {
+  min-width: 100px;
+}
