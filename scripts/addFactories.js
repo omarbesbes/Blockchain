@@ -3,7 +3,7 @@ const { ethers } = require("hardhat");
 
 async function main() {
   // Replace this address with the actual deployed StakeholderRegistry address
-  const registryAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+  const registryAddress = "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318";
 
   // Get the contract factory and attach to the deployed instance
   const StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
@@ -11,7 +11,7 @@ async function main() {
   console.log("Attached to StakeholderRegistry at:", await registry.getAddress());
 
   // // Get signers (these simulate different accounts)
-  const [owner, stakeholder1, stakeholder2, stakeholder3] = await ethers.getSigners();
+  const [owner, stakeholder1, stakeholder2, stakeholder3,acc4,acc5,acc6] = await ethers.getSigners();
 
   // Define roles and metadata URIs.
   // Adjust role numbers as defined in your contract's enum.
