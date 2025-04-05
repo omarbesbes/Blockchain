@@ -3,7 +3,7 @@ const { ethers } = require("hardhat");
 
 async function main() {
   // Replace this address with the actual deployed StakeholderRegistry address
-  const registryAddress = "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318";
+  const registryAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
   // Get the contract factory and attach to the deployed instance
   const StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
