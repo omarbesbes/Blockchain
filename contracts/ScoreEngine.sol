@@ -4,6 +4,9 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StakeholderRegistry.sol";
 import "./DisputeManager.sol";
+import "./ProductManager.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 
 /**
  * @title ScoreEngine
@@ -20,13 +23,26 @@ contract ScoreEngine is Ownable {
     // Reference to the DisputeManager (if needed)
     DisputeManager private disputeManager;
 
+    // Reference to the ProductManager
+    ProductManager public productManager;
+
+
     // Constant base alpha, expressed as an integer percentage (e.g., 10 means 10%)
     uint256 public constant BASE_ALPHA = 1;
     // Precision constant for fixed-point arithmetic
     uint256 public constant PRECISION = 1e18;
+    
+    uint256 public constant REWARD_AMOUNT = 10 * 1e18; // Fixed reward: 10 PTK
+
+    IERC20 public token;
 
     /**
-     * @dev Enum of all possible score types.
+     * @dev Enum of all possible score types, consolidated from your table:
+     *
+     *  - Supplier (scored by Factory): TRUST, DELIVERY_SPEED, MATERIAL_QUALITY
+     *  - Factory (scored by Consumer): PRODUCT_QUALITY, WARRANTY, ECO_RATING
+     *  - Retailer (scored by Distributor): PACKAGING, TRANSPARENCY, ACCURACY
+     *  - Distributor (scored by Consumer): DELIVERY, PRICE_FAIRNESS, RETURN_POLICY
      */
     enum ScoreType {
         TRUST,              // 0
@@ -88,9 +104,11 @@ contract ScoreEngine is Ownable {
     /**
      * @dev Constructor sets references to StakeholderRegistry and DisputeManager.
      */
-    constructor (address _registryAddress, address _disputeManagerAddress) Ownable(msg.sender) {
+    constructor (address _registryAddress, address _disputeManagerAddress, address _token, address _productManagerAddress) Ownable(msg.sender) {
         registry = StakeholderRegistry(_registryAddress);
         disputeManager = DisputeManager(payable(_disputeManagerAddress));
+        token = IERC20(_token);
+        productManager = ProductManager(_productManagerAddress);
     }
 
     /**
@@ -105,7 +123,7 @@ contract ScoreEngine is Ownable {
         require(registry.isRegistered(_rated), "Rated stakeholder not registered");
 
         // Identify roles of rater and rated.
-        StakeholderRegistry.Role raterRole = registry.getRole(msg.sender);
+        StakeholderRegistry.Role raterRole = registry.getRole(tx.origin);
         StakeholderRegistry.Role ratedRole = registry.getRole(_rated);
 
         require(raterRole != StakeholderRegistry.Role.None, "Rater not valid");
@@ -115,21 +133,20 @@ contract ScoreEngine is Ownable {
             "Invalid role or score type for this rating"
         );
 
+        //initialize condifenceScores
+        if (confidenceScores[tx.origin] == 0) {
+            confidenceScores[tx.origin] = 100;
+        }
+
+        // Compute the new exponential moving average (EMA) for this score type.
         uint256 newEMA;
         if (scoreCountsByType[_rated][_scoreType] == 0) {
-            if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
-                if (confidenceScores[msg.sender] == 0) {
-                    confidenceScores[msg.sender] = 100;
-                }
-            }
+            // First rating: set EMA to the raw value scaled by PRECISION.
             newEMA = uint256(_value) * PRECISION;
         } else {
             uint effectiveAlpha;
             if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
-                if (confidenceScores[msg.sender] == 0) {
-                    confidenceScores[msg.sender] = 100;
-                }
-                effectiveAlpha = (BASE_ALPHA * confidenceScores[msg.sender]) / 100;
+                effectiveAlpha = (BASE_ALPHA * confidenceScores[tx.origin]) / 100;
             } else {
                 effectiveAlpha = BASE_ALPHA;
             }
@@ -141,7 +158,7 @@ contract ScoreEngine is Ownable {
         Score memory newScore = Score({
             scoreType: _scoreType,
             value: newEMA,
-            rater: msg.sender,
+            rater: tx.origin,
             timestamp: block.timestamp
         });
         stakeholderScores[_rated].push(newScore);
@@ -151,16 +168,30 @@ contract ScoreEngine is Ownable {
         scoreHistory[newScoreId] = ScoreRecord({
             scoreType: _scoreType,
             value: newEMA,
-            rater: msg.sender,
+            rater: tx.origin,
             timestamp: block.timestamp
         });
         stakeholderScoreIds[_rated].push(newScoreId);
 
-        emit ScoreAssigned(msg.sender, _rated, _scoreType, newEMA, block.timestamp, newScoreId);
+        emit ScoreAssigned(tx.origin, _rated, _scoreType, newEMA, block.timestamp, newScoreId);
+
+        // handle returning of small reward for article review that was included in the initial price of the device
+        if(raterRole == StakeholderRegistry.Role.Consumer && ratedRole == StakeholderRegistry.Role.Factory) {
+            require(address(token) != address(0), "Token address not set");
+            require(token.balanceOf(address(this)) >= REWARD_AMOUNT, "Insufficient reward funds in contract");
+            bool sent = token.transfer(tx.origin, REWARD_AMOUNT);
+            require(sent, "Token transfer failed");
+        }
     }
 
     /**
-     * @notice Updates the rater's confidence score after a dispute.
+     * @dev After a dispute is finalized, call this function to update the rater's
+     *      confidence score using the formula from your image.
+     *
+     * @param _dispute The dispute struct from DisputeManager.
+     *
+     * Requirements:
+     * - The rater must be a Factory or Retailer.
      */
     function updateConfidenceAfterDispute(
         DisputeManager.Dispute memory _dispute

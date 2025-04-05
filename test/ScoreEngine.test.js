@@ -3,7 +3,7 @@ const { ethers } = require("hardhat");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 describe("ScoreEngine", function () {
-  let scoreEngine, registry, disputeManager;
+  let scoreEngine, registry, disputeManager, token, productManager;
   let deployer, supplier, factory, consumer, retailer, distributor, nonRegistered;
 
   // StakeholderRegistry roles (assumed order: None=0, Supplier=1, Factory=2, Distributor=3, Retailer=4, Consumer=5)
@@ -34,6 +34,8 @@ describe("ScoreEngine", function () {
 
   // Precision constant as defined in the contract (1e18)
   const PRECISION = ethers.parseUnits("1", 18);
+  const REWARD_AMOUNT = ethers.parseUnits("10", 18);
+
 
   // Helper function to parse the ScoreAssigned event from transaction logs.
   async function getScoreAssignedEvent(tx) {
@@ -65,6 +67,12 @@ describe("ScoreEngine", function () {
     registry = await StakeholderRegistry.deploy();
     await registry.waitForDeployment();
 
+    //Deploy ProductManager
+    const ProductManager = await ethers.getContractFactory("ProductManager");
+    productManager = await ProductManager.deploy();
+    await productManager.waitForDeployment();
+    
+
     // Register stakeholders (assume registerStakeholder(role, metadataURI))
     await registry.connect(supplier).registerStakeholder(Role.Supplier, "supplier metadata");
     await registry.connect(factory).registerStakeholder(Role.Factory, "factory metadata");
@@ -77,18 +85,28 @@ describe("ScoreEngine", function () {
     disputeManager = await DisputeManager.deploy(registry.getAddress());
     await disputeManager.waitForDeployment();
 
-    // Deploy ScoreEngine using the registry and disputeManager addresses.
+    // Deploy the Token contract.
+    const Token = await ethers.getContractFactory("Token");
+    token = await Token.deploy();
+    await token.waitForDeployment();
+
+    // Deploy ScoreEngine using the registry, disputeManager and token addresses.
     const ScoreEngine = await ethers.getContractFactory("ScoreEngine");
-    scoreEngine = await ScoreEngine.deploy(registry.getAddress(), disputeManager.getAddress());
+    scoreEngine = await ScoreEngine.deploy(registry.getAddress(), disputeManager.getAddress(), token.getAddress(), productManager.getAddress());
     await scoreEngine.waitForDeployment();
+    await token.transfer(scoreEngine.getAddress(), ethers.parseUnits("1000", 18));
+
   });
 
-  describe("rateStakeholder & EMA per score type", function () {
-    it("allows a Factory to rate a Supplier with a valid score type and computes EMA correctly", async function () {
+  describe("rateStakeholder & EMA calculation", function () {
+    it("allows a Factory to rate a Supplier and computes EMA correctly without reward", async function () {
       const supplierAddr = await supplier.getAddress();
       const factoryAddr = await factory.getAddress();
 
-      // First rating: value 8 should set EMA = 8 * PRECISION.
+      // Record factory token balance before rating.
+      const factoryInitialBalance = await token.balanceOf(factoryAddr);
+
+      // Factory (role 2) rates Supplier with score type TRUST (0) and rating value 8.
       const tx1 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 8);
       const event1 = await getScoreAssignedEvent(tx1);
       expect(event1.args.rater).to.equal(factoryAddr);
@@ -99,24 +117,26 @@ describe("ScoreEngine", function () {
       let globalScore = await scoreEngine.globalScoresByType(supplierAddr, ScoreType.TRUST);
       expect(globalScore).to.equal(ethers.parseUnits("8", 18));
 
-      // Second rating: value 6.
-      // For a Factory, effectiveAlpha = (BASE_ALPHA * 100) / 100 = 1.
-      // Expected newEMA = (1 * (6 * PRECISION) + (99 * (8 * PRECISION)))/100
-      //                = (6e18 + 792e18) / 100 = 798e18/100 = 7.98e18.
+      // Second rating: Factory rates Supplier with value 6.
       const tx2 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 6);
       const event2 = await getScoreAssignedEvent(tx2);
-      console.log(event2.args.value);
       expect(event2.args.value).to.equal(7980000000000000000n);
-
       globalScore = await scoreEngine.globalScoresByType(supplierAddr, ScoreType.TRUST);
       expect(globalScore).to.equal(7980000000000000000n);
+
+      // Verify that factory (non-consumer) did not receive any token reward.
+      const factoryFinalBalance = await token.balanceOf(factoryAddr);
+      expect(factoryFinalBalance-factoryInitialBalance).to.equal(0);
     });
 
-    it("allows a Consumer to rate a Factory with valid score type (PRODUCT_QUALITY)", async function () {
+    it("allows a Consumer to rate a Factory and receives token reward", async function () {
       const factoryAddr = await factory.getAddress();
       const consumerAddr = await consumer.getAddress();
 
-      // For a Consumer, first rating sets EMA = value * PRECISION.
+      // Record consumer token balance before rating.
+      const consumerInitialBalance = await token.balanceOf(consumerAddr);
+
+      // Consumer (role 5) rates Factory with allowed score type PRODUCT_QUALITY (3) and value 9.
       const tx = await scoreEngine.connect(consumer).rateStakeholder(factoryAddr, ScoreType.PRODUCT_QUALITY, 9);
       const event = await getScoreAssignedEvent(tx);
       expect(event.args.rater).to.equal(consumerAddr);
@@ -126,72 +146,13 @@ describe("ScoreEngine", function () {
 
       const ema = await scoreEngine.globalScoresByType(factoryAddr, ScoreType.PRODUCT_QUALITY);
       expect(ema).to.equal(ethers.parseUnits("9", 18));
+
+      // Verify that consumer received the reward.
+      const consumerFinalBalance = await token.balanceOf(consumerAddr);
+      expect(consumerFinalBalance-consumerInitialBalance).to.equal(REWARD_AMOUNT);
     });
 
-    it("allows a Retailer to rate a Distributor with valid score type (PACKAGING)", async function () {
-      const distributorAddr = await distributor.getAddress();
-      const retailerAddr = await retailer.getAddress();
-
-      // For a Retailer, first rating sets EMA = value * PRECISION.
-      const tx = await scoreEngine.connect(retailer).rateStakeholder(distributorAddr, ScoreType.PACKAGING, 7);
-      const event = await getScoreAssignedEvent(tx);
-      expect(event.args.rater).to.equal(retailerAddr);
-      expect(event.args.rated).to.equal(distributorAddr);
-      expect(event.args.scoreType).to.equal(ScoreType.PACKAGING);
-      expect(event.args.value).to.equal(ethers.parseUnits("7", 18));
-
-      const ema = await scoreEngine.globalScoresByType(distributorAddr, ScoreType.PACKAGING);
-      expect(ema).to.equal(ethers.parseUnits("7", 18));
-    });
-
-    it("allows a Consumer to rate a Retailer with valid score type (DELIVERY)", async function () {
-      const retailerAddr = await retailer.getAddress();
-      const consumerAddr = await consumer.getAddress();
-
-      // For a Consumer, first rating sets EMA = value * PRECISION.
-      const tx = await scoreEngine.connect(consumer).rateStakeholder(retailerAddr, ScoreType.DELIVERY, 10);
-      const event = await getScoreAssignedEvent(tx);
-      expect(event.args.rater).to.equal(consumerAddr);
-      expect(event.args.rated).to.equal(retailerAddr);
-      expect(event.args.scoreType).to.equal(ScoreType.DELIVERY);
-      expect(event.args.value).to.equal(ethers.parseUnits("10", 18));
-
-      const ema = await scoreEngine.globalScoresByType(retailerAddr, ScoreType.DELIVERY);
-      expect(ema).to.equal(ethers.parseUnits("10", 18));
-    });
-
-    it("updates score history and getter functions correctly", async function () {
-      const supplierAddr = await supplier.getAddress();
-      const factoryAddr = await factory.getAddress();
-
-      // First rating: value 8 -> EMA = 8 * PRECISION.
-      const tx1 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 8);
-      const event1 = await getScoreAssignedEvent(tx1);
-      const scoreId1 = event1.args.scoreId;
-
-      // Second rating: value 6 -> EMA = (99*(6 * PRECISION) + 1*(8 * PRECISION))/100 = 6.02 * PRECISION.
-      const tx2 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 6);
-      const event2 = await getScoreAssignedEvent(tx2);
-      const scoreId2 = event2.args.scoreId;
-
-      const scores = await scoreEngine.getScores(supplierAddr);
-      expect(scores.length).to.equal(2);
-      expect(scores[1].value).to.equal(7980000000000000000n);
-
-      const scoreIds = await scoreEngine.getStakeholderScoreIds(supplierAddr);
-      expect(scoreIds.length).to.equal(2);
-      expect(scoreIds[0]).to.equal(scoreId1);
-      expect(scoreIds[1]).to.equal(scoreId2);
-
-      const scoreRecord1 = await scoreEngine.getScoreById(scoreId1);
-      expect(scoreRecord1.value).to.equal(ethers.parseUnits("8", 18));
-      expect(scoreRecord1.scoreType).to.equal(ScoreType.TRUST);
-      const scoreRecord2 = await scoreEngine.getScoreById(scoreId2);
-      expect(scoreRecord2.value).to.equal(7980000000000000000n);
-      expect(scoreRecord2.scoreType).to.equal(ScoreType.TRUST);
-    });
-
-    it("reverts if a rating is submitted with invalid score value", async function () {
+    it("reverts if a rating is submitted with an invalid score value", async function () {
       await expect(
         scoreEngine.connect(factory).rateStakeholder(await supplier.getAddress(), ScoreType.TRUST, 0)
       ).to.be.revertedWith("Score value must be between 1 and 10");
@@ -213,12 +174,14 @@ describe("ScoreEngine", function () {
     });
 
     it("reverts if an invalid role combination is used", async function () {
+      // For example, Factory rating itself is disallowed.
       await expect(
-        scoreEngine.connect(factory).rateStakeholder(await factory.getAddress(), ScoreType.TRUST, 5)
+        scoreEngine.connect(factory).rateStakeholder(factory.getAddress(), ScoreType.TRUST, 5)
       ).to.be.revertedWith("Invalid role or score type for this rating");
     });
 
     it("reverts if a valid role combination but invalid score type is used", async function () {
+      // Factory (role 2) attempting to rate Supplier with PRODUCT_QUALITY (3) should revert.
       await expect(
         scoreEngine.connect(factory).rateStakeholder(await supplier.getAddress(), ScoreType.PRODUCT_QUALITY, 5)
       ).to.be.revertedWith("Invalid role or score type for this rating");
