@@ -35,6 +35,12 @@ contract TransactionManager {
     mapping(uint256 => Transaction) private _transactions;
     mapping(uint256 => bool) private _exists;
 
+    // NEW: Mapping to track transactions that have been rated but are awaiting buyer action.
+    // The seller address is the key.
+    mapping(address => uint256[]) public pendingRatedTransactions;
+    // NEW: Mapping to record whether a transaction rating was accepted (true) or disputed (false).
+    mapping(uint256 => bool) public ratingAcceptedStatus;
+
     event BuyOperationRecorded(
         uint256 indexed transactionId,
         address indexed buyer,
@@ -43,6 +49,9 @@ contract TransactionManager {
     );
     event TransactionValidated(uint256 indexed transactionId);
     event SellerRated(uint256 indexed transactionId, address indexed buyer, address indexed rated);
+    // NEW events:
+    event RatingAccepted(uint256 indexed transactionId, address indexed buyer);
+    event RatingDisputed(uint256 indexed transactionId, address indexed buyer);
 
     constructor(
         address _registry,
@@ -169,6 +178,44 @@ contract TransactionManager {
         }
 
         emit SellerRated(transactionId, msg.sender, toBeRated);
+
+        // NEW: Track this rated transaction (awaiting buyer acceptance/dispute)
+        pendingRatedTransactions[txn.seller].push(transactionId);
+    }
+
+    // NEW: Returns all pending rated transaction IDs for a given seller address.
+    function getPendingRatedTransactions(address _seller) external view returns (uint256[] memory) {
+        return pendingRatedTransactions[_seller];
+    }
+
+    // NEW: Updates the rating status for a given transaction.
+    // If 'accepted' is true, the seller accepts the rating; otherwise, the rating is disputed.
+    // In both cases, the transaction is removed from the pending mapping.
+    function updateRatingStatus(uint256 transactionId, bool accepted) external {
+        require(_exists[transactionId], "Transaction does not exist");
+        Transaction storage txn = _transactions[transactionId];
+        require(txn.seller == msg.sender, "Only buyer can update rating status");
+
+        ratingAcceptedStatus[transactionId] = accepted;
+        _removePendingRatedTransaction(txn.seller, transactionId);
+
+        if (accepted) {
+            emit RatingAccepted(transactionId, msg.sender);
+        } else {
+            emit RatingDisputed(transactionId, msg.sender);
+        }
+    }
+
+    // INTERNAL: Remove a transactionId from pendingRatedTransactions for a given seller.
+    function _removePendingRatedTransaction(address seller, uint256 transactionId) internal {
+        uint256[] storage pending = pendingRatedTransactions[seller];
+        for (uint256 i = 0; i < pending.length; i++) {
+            if (pending[i] == transactionId) {
+                pending[i] = pending[pending.length - 1];
+                pending.pop();
+                break;
+            }
+        }
     }
 
     // Returns the pending transaction ID for a given product (or 0 if none)
@@ -251,4 +298,3 @@ contract TransactionManager {
         return txn.ratedForFactory[scoreType];
     }
 }
-    

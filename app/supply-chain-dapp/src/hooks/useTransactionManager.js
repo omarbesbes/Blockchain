@@ -1,3 +1,4 @@
+//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\hooks\useTransactionManager.js
 import { useWalletClient, usePublicClient } from "wagmi";
 import {
   TransactionManagerAddress,
@@ -91,7 +92,7 @@ export function useTransactionManager() {
     });
   }
 
-  // 7. Get a transaction's details using the getTransaction function (read-only)
+  // 7. Get a transaction's details using getTransaction (read-only)
   async function getTransaction(txId) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -131,6 +132,31 @@ export function useTransactionManager() {
     });
   }
 
+  // NEW 11. Get all pending rated transactions for a given seller (read-only)
+  async function getPendingRatedTransactions(seller) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "getPendingRatedTransactions",
+      args: [seller],
+    });
+  }
+
+  // NEW 12. Update the rating status (accepted or disputed) for a given transaction.
+  async function updateRatingStatus(transactionId, accepted) {
+    if (!walletClient) throw new Error("No wallet connected");
+
+    const txHash = await walletClient.writeContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "updateRatingStatus",
+      args: [transactionId, accepted],
+      account: walletClient.account,
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    return receipt;
+  }
+
   return {
     recordBuyOperation,
     confirmSellOperation,
@@ -142,5 +168,7 @@ export function useTransactionManager() {
     getLastTransactionId,
     isSellerRated,
     isFactoryRated,
+    getPendingRatedTransactions, // NEW
+    updateRatingStatus,         // NEW
   };
 }

@@ -1,159 +1,220 @@
-// src/pages/ChallengesTab.jsx
+//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\ChallengesTab.jsx
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
+import { useTransactionManager } from '../hooks/useTransactionManager';
 import { useDisputeManager } from '../hooks/useDisputeManager';
-// import './ChallengesTab.css';
+import { useToken } from '../hooks/useToken';
+import { useScoreEngine } from '../hooks/useScoreEngine';
+import './ChallengesTab.css';
+
+// Helper mapping from score type IDs to human-readable names
+const scoreTypeNames = {
+  0: 'Trust',
+  1: 'Quality',
+  2: 'Timeliness',
+  3: 'Efficiency',
+  4: 'Responsiveness',
+  5: 'Communication', 
+  6: 'Innovation',
+  7: 'Reliability',
+  8: 'Support',
+  9: 'Professionalism',
+  10: 'Expertise',
+  11: 'Customer Service'
+};
 
 export default function ChallengesTab() {
   const { address } = useAccount();
   const {
-    getScoresAgainstYou,
-    challengeScore,
-    getOngoingChallenges,
-    acknowledgeChallenge,
-    denyChallenge,
-  } = useDisputeManager();
+    getPendingRatedTransactions,
+    getTransaction,
+    updateRatingStatus,
+  } = useTransactionManager();
+  const { initiateDispute } = useDisputeManager();
+  const { decimals } = useToken();
+  const { getScores } = useScoreEngine();
 
-  const [scores, setScores] = useState([]);
-  const [challenges, setChallenges] = useState([]);
-  const [loadingScores, setLoadingScores] = useState(false);
-  const [loadingChallenges, setLoadingChallenges] = useState(false);
-  const [error, setError] = useState(null);
+  const [pendingRatings, setPendingRatings] = useState([]);
+  const [sellerScores, setSellerScores] = useState([]);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Fetch scores where you have been scored
+  // When address changes, load pending ratings and seller scores.
   useEffect(() => {
-    async function fetchScores() {
-      setLoadingScores(true);
-      try {
-        const data = await getScoresAgainstYou(address);
-        setScores(data);
-      } catch (err) {
-        console.error(err);
-        setError("Failed to fetch scores");
-      }
-      setLoadingScores(false);
-    }
-    async function fetchChallenges() {
-      setLoadingChallenges(true);
-      try {
-        const data = await getOngoingChallenges(address);
-        setChallenges(data);
-      } catch (err) {
-        console.error(err);
-        setError("Failed to fetch challenges");
-      }
-      setLoadingChallenges(false);
-    }
     if (address) {
-      fetchScores();
-      fetchChallenges();
+      fetchPendingRatings();
     }
-  }, [address, getScoresAgainstYou, getOngoingChallenges]);
+  }, [address]);
 
-  // Initiate a challenge against a score
-  const handleChallengeScore = async (scoreId, scorer) => {
+  async function fetchPendingRatings() {
+    setLoading(true);
+    setError('');
     try {
-      await challengeScore(scoreId, scorer);
-      alert("Challenge initiated successfully");
-      // Optionally, refresh the challenges list after initiating a challenge
-      const updatedChallenges = await getOngoingChallenges(address);
-      setChallenges(updatedChallenges);
+      // Get pending transaction IDs for this seller.
+      const pendingTxIds = await getPendingRatedTransactions(address);
+      // Fetch details for each pending transaction.
+      const details = await Promise.all(
+        pendingTxIds.map(async (txId) => await getTransaction(txId))
+      );
+      setPendingRatings(details);
+      
+      // Additionally, fetch all score records for this seller.
+      const scores = await getScores(address);
+      console.log("Score records:", scores);
+      setSellerScores(scores || []);
     } catch (err) {
       console.error(err);
-      alert("Failed to initiate challenge");
+      setError('Failed to load pending ratings.');
     }
-  };
+    setLoading(false);
+  }
 
-  // For buyers of a disputed seller, acknowledge the challenged score
-  const handleAcknowledge = async (challengeId) => {
+  async function handleAcknowledge(txId) {
+    setError('');
     try {
-      await acknowledgeChallenge(challengeId);
-      alert("Challenge acknowledged");
-      const updatedChallenges = await getOngoingChallenges(address);
-      setChallenges(updatedChallenges);
+      // Update rating status to accepted (true)
+      await updateRatingStatus(txId, true);
+      await fetchPendingRatings();
     } catch (err) {
       console.error(err);
-      alert("Failed to acknowledge challenge");
+      setError('Error acknowledging rating.');
     }
-  };
+  }
 
-  // For buyers of a disputed seller, deny the challenged score
-  const handleDeny = async (challengeId) => {
+  async function handleDispute(txId) {
+    setError('');
     try {
-      await denyChallenge(challengeId);
-      alert("Challenge denied");
-      const updatedChallenges = await getOngoingChallenges(address);
-      setChallenges(updatedChallenges);
+      // Update rating status to disputed (false)
+      await updateRatingStatus(txId, false);
+      // Get transaction details to obtain the seller (respondent) address.
+      const txDetail = await getTransaction(txId);
+      // txDetail[1] is the seller address.
+      const respondent = txDetail[1];
+      // Use token decimals to calculate the deposit amount in token units.
+      const tokenDecimals = await decimals();
+      // Deposit 1 token: equal to 1 * 10^(tokenDecimals)
+      const depositAmount = (BigInt(1) * (BigInt(10) ** BigInt(tokenDecimals))).toString();
+      // Initiate dispute via dispute manager.
+      await initiateDispute(txId, respondent, depositAmount);
+      await fetchPendingRatings();
     } catch (err) {
       console.error(err);
-      alert("Failed to deny challenge");
+      setError('Error disputing rating.');
     }
-  };
+  }
 
   return (
-    <div className="challenges-tab-container">
-      <h2>Challenges</h2>
-      {error && <p className="error">{error}</p>}
-
-      <section className="scores-section">
-        <h3>Scores Received</h3>
-        {loadingScores ? (
-          <p>Loading scores...</p>
-        ) : scores.length === 0 ? (
-          <p>No scores received.</p>
-        ) : (
-          <ul className="score-list">
-            {scores.map((score) => (
-              <li key={score.scoreId} className="score-item">
-                <p>
-                  <strong>Score ID:</strong> {score.scoreId}
-                </p>
-                <p>
-                  <strong>Scorer:</strong> {score.scorer}
-                </p>
-                <p>
-                  <strong>Value:</strong> {score.value}
-                </p>
-                <button onClick={() => handleChallengeScore(score.scoreId, score.scorer)}>
-                  Challenge Score
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="challenges-section">
-        <h3>Ongoing Challenges</h3>
-        {loadingChallenges ? (
-          <p>Loading challenges...</p>
-        ) : challenges.length === 0 ? (
-          <p>No ongoing challenges.</p>
-        ) : (
-          <ul className="challenge-list">
-            {challenges.map((challenge) => (
-              <li key={challenge.id} className="challenge-item">
-                <p>
-                  <strong>Challenge ID:</strong> {challenge.id}
-                </p>
-                <p>
-                  <strong>Score ID:</strong> {challenge.scoreId}
-                </p>
-                <p>
-                  <strong>Challenger:</strong> {challenge.challenger}
-                </p>
-                <p>
-                  <strong>Status:</strong> {challenge.status}
-                </p>
-                <div className="challenge-actions">
-                  <button onClick={() => handleAcknowledge(challenge.id)}>Acknowledge</button>
-                  <button onClick={() => handleDeny(challenge.id)}>Deny</button>
+    <div className="challenges-container">
+      <h2 className="challenges-title">Pending Received Ratings</h2>
+      
+      {loading && (
+        <div className="status-message loading">Loading pending ratings...</div>
+      )}
+      
+      {error && (
+        <div className="status-message error">{error}</div>
+      )}
+      
+      {(!loading && pendingRatings.length === 0) && (
+        <div className="status-message empty">No pending ratings to review.</div>
+      )}
+      
+      {pendingRatings.length > 0 && (
+        <ul className="ratings-list">
+          {pendingRatings.map((txDetail, index) => {
+            // Each txDetail is a tuple: [transactionId, seller, buyer, productId, timestamp, status]
+            const txId = txDetail[0];
+            
+            // Filter sellerScores to display only scores for the current transaction.
+            let ratingDetails = [];
+            
+            if (sellerScores && sellerScores.length) {
+              // Try to find scores with matching transactionId
+              ratingDetails = sellerScores.filter(score => {
+                // If score is an object with a transactionId property
+                if (score && typeof score === 'object' && 'transactionId' in score) {
+                  return score.transactionId.toString() === txId.toString();
+                }
+                // If score is an array and the last element might be transactionId
+                else if (Array.isArray(score) && score.length >= 7) {
+                  return score[6].toString() === txId.toString();
+                }
+                // If there's no clear transactionId, default to showing all scores
+                return true; 
+              });
+            }
+            
+            return (
+              <li key={index} className="rating-item">
+                <div className="rating-header">
+                  <span className="transaction-id">Transaction #{txId.toString()}</span>
+                  <span className={`transaction-status ${txDetail[5] === 1 ? 'validated' : 'pending'}`}>
+                    {txDetail[5] === 1 ? 'Validated' : 'Pending'}
+                  </span>
+                </div>
+                
+                <div className="transaction-detail">
+                  <span className="detail-label">Product ID:</span>
+                  <span className="detail-value">{txDetail[3].toString()}</span>
+                </div>
+                
+                <div className="transaction-detail">
+                  <span className="detail-label">Buyer:</span>
+                  <span className="detail-value">{txDetail[2]}</span>
+                </div>
+                
+                <div className="rating-details-section">
+                  <h4 className="rating-details-title">Ratings Received</h4>
+                  {ratingDetails && ratingDetails.length > 0 ? (
+                    <ul className="ratings-detail-list">
+                      {ratingDetails.map((score, i) => {
+                        // Handle different potential score structures
+                        let scoreType, scoreValue;
+                        
+                        if (typeof score === 'object' && !Array.isArray(score)) {
+                          // If score is a regular object
+                          scoreType = score.scoreType !== undefined ? score.scoreType : 'Unknown';
+                            scoreValue = score.value !== undefined ? (Number(score.value) / 1e17).toString() : (score.scoreValue !== undefined ? score.scoreValue : 'N/A');
+                        } else if (Array.isArray(score)) {
+                          // If score is an array: try to extract scoreType and value from appropriate indices
+                          scoreType = score[3] !== undefined ? score[3] : 'Unknown';
+                          scoreValue = score[4] !== undefined ? score[4] : 'N/A';
+                        }
+                        
+                        const scoreTypeName = scoreTypeNames[scoreType] || `Type ${scoreType}`;
+                        
+                        return (
+                          <li key={i} className="rating-detail-item">
+                            <span className="rating-type">{scoreTypeName}</span>
+                            <span className="rating-value">{(Number(scoreValue)/10).toString()}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="empty-ratings">No rating details found for this transaction.</p>
+                  )}
+                </div>
+                
+                <div className="actions-container">
+                  <button 
+                    className="action-button acknowledge-button"
+                    onClick={() => handleAcknowledge(txId)}
+                  >
+                    Acknowledge
+                  </button>
+                  <button 
+                    className="action-button dispute-button"
+                    onClick={() => handleDispute(txId)}
+                  >
+                    Dispute
+                  </button>
                 </div>
               </li>
-            ))}
-          </ul>
-        )}
-      </section>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

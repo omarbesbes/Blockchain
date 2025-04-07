@@ -7,9 +7,7 @@ import {
 } from "../contracts/DisputeManager";
 
 export function useDisputeManager() {
-  // For writes (transactions)
   const { data: walletClient } = useWalletClient();
-  // For reads (view/pure calls)
   const publicClient = usePublicClient();
 
   async function initiateDispute(ratingId, respondent, depositAmount) {
@@ -63,12 +61,24 @@ export function useDisputeManager() {
   }
 
   async function getDisputeDetails(disputeId) {
-    return await publicClient.readContract({
+    return publicClient.readContract({
       address: disputeManagerAddress,
       abi: disputeManagerABI,
       functionName: "getDisputeDetails",
       args: [disputeId],
     });
+  }
+
+  async function recordPurchase(buyer, seller) {
+    if (!walletClient) throw new Error("No wallet connected");
+    const txHash = await walletClient.writeContract({
+      address: disputeManagerAddress,
+      abi: disputeManagerABI,
+      functionName: "recordPurchase",
+      args: [buyer, seller],
+      account: walletClient.account,
+    });
+    return publicClient.waitForTransactionReceipt({ hash: txHash });
   }
 
   return {
@@ -77,5 +87,6 @@ export function useDisputeManager() {
     voteDispute,
     finalizeDispute,
     getDisputeDetails,
+    recordPurchase
   };
 }
