@@ -35,7 +35,8 @@ function ChainIdChecker() {
     async function fetchChainId() {
       try {
         const id = await publicClient.getChainId();
-        setChainId(id);
+        console.log(id);
+        setChainId("chain id",id);
       } catch (error) {
         console.error("Failed to get chain id:", error);
       }

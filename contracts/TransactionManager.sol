@@ -55,7 +55,7 @@ contract TransactionManager {
     function recordBuyOperation(address seller, uint256 productId) external returns (uint256) {
         require(registry.isRegistered(msg.sender), "Buyer not registered");
         require(registry.isRegistered(seller), "Seller not registered");
-        require(!hasPendingTransaction(productId), "Pending transaction exists for this product");
+        // require(!hasPendingTransaction(productId), "Pending transaction exists for this product");
 
         int256 buyerRole = int256(uint256(registry.getRole(msg.sender)));
         int256 sellerRole = int256(uint256(registry.getRole(seller)));
@@ -110,7 +110,8 @@ contract TransactionManager {
         // For Factory -> Supplier (or other combinations), no deposit is required.
         
         // If it's a factory product sale, transfer the product ownership
-        if (sellerRole >= 2 && txn.productId > 0) {
+        // if (sellerRole >= 2 && txn.productId > 0) {
+        if (txn.productId > 0) {
             productManager.transferProduct(txn.buyer, txn.productId);
         }
 

@@ -1,7 +1,8 @@
-//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\Dashboard.jsx
+// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\Dashboard.jsx
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useStakeholderRegistry } from '../hooks/useStakeholderRegistry';
+import { useTransactionManager } from '../hooks/useTransactionManager';
 import { useGetProductsByOwner, useProductManager } from '../hooks/useProductManager';
 import { useScoreEngine } from '../hooks/useScoreEngine';
 import { useToken } from '../hooks/useToken';
@@ -11,14 +12,15 @@ export default function Dashboard() {
   const { address, isConnected } = useAccount();
   const { getStakeholderType } = useStakeholderRegistry();
   const { getGlobalScore, getApplicableScoreTypes } = useScoreEngine();
-  
 
   // Product Manager hooks
   const { products, error: productsError, isPending: productsLoading } = useGetProductsByOwner(address);
   const { updateProductMetadata, getProductDetails, mintProduct } = useProductManager();
+  const { recordBuyOperation } = useTransactionManager();
 
   // State for role, stakeholder errors, etc.
-  const [role, setRole] = useState('');
+  // Initialize role as null so we know it hasn’t been fetched yet
+  const [role, setRole] = useState(null);
   const [stakeholderError, setStakeholderError] = useState(null);
 
   // States for updating/creating product metadata
@@ -28,12 +30,18 @@ export default function Dashboard() {
 
   // State for scores
   const [scores, setScores] = useState([]);
+  // Flag to indicate scores have been fetched
+  const [scoresFetched, setScoresFetched] = useState(false);
 
   // Array to hold product details (including metadata)
   const [productDetailsList, setProductDetailsList] = useState([]);
+  // Flag to indicate product details have been fetched
+  const [detailsFetched, setDetailsFetched] = useState(false);
 
   // State for token balance and buying tokens
   const [tokenBalance, setTokenBalance] = useState(0);
+  // Flag for token balance fetch (helps distinguish between 0 balance and not fetched yet)
+  const [balanceFetched, setBalanceFetched] = useState(false);
   const [buyAmount, setBuyAmount] = useState('');
   const [message, setMessage] = useState('');
 
@@ -56,7 +64,7 @@ export default function Dashboard() {
   // Token hooks
   const { balanceOf, buy } = useToken();
 
-  // 1) Fetch user's stakeholder role (dependency: address only)
+  // 1) Fetch user's stakeholder role (only once per address)
   useEffect(() => {
     async function fetchDetails() {
       if (!address) return;
@@ -77,10 +85,12 @@ export default function Dashboard() {
         setRole('Not Registered');
       }
     }
-    fetchDetails();
-  }, [address]); // Removed getStakeholderType from dependencies
+    if (role === null) {
+      fetchDetails();
+    }
+  }, [address, getStakeholderType, role]);
 
-  // 2) Fetch scores (dependency: address only)
+  // 2) Fetch scores (only once per address)
   useEffect(() => {
     async function fetchApplicableScores() {
       if (!address) return;
@@ -93,14 +103,17 @@ export default function Dashboard() {
           })
         );
         setScores(scoresData);
+        setScoresFetched(true);
       } catch (err) {
         console.error('Error fetching scores:', err);
       }
     }
-    fetchApplicableScores();
-  }, [address]); // Removed getGlobalScore and getApplicableScoreTypes
+    if (!scoresFetched) {
+      fetchApplicableScores();
+    }
+  }, [address, getApplicableScoreTypes, getGlobalScore, scoresFetched, scoreTypeMapping]);
 
-  // 3) Fetch product details when products update (dependency: products, productsLoading, productsError)
+  // 3) Fetch product details when products update (only once)
   useEffect(() => {
     async function fetchAllProductDetails() {
       if (!products || products.length === 0) {
@@ -115,30 +128,34 @@ export default function Dashboard() {
           })
         );
         setProductDetailsList(detailsArray);
+        setDetailsFetched(true);
       } catch (err) {
         console.error('Error fetching product details:', err);
         setProductDetailsList([]);
       }
     }
-    if (!productsLoading && !productsError) {
+    if (!productsLoading && !productsError && !detailsFetched) {
       fetchAllProductDetails();
     }
-  }, [products, productsLoading, productsError]); // Removed getProductDetails
+  }, [products, productsLoading, productsError, getProductDetails, detailsFetched]);
 
-  // 4) Fetch token balance when role is "Factory" (dependency: role, address)
+  // 4) Fetch token balance when role is "Factory" (only once)
   useEffect(() => {
     async function fetchBalance() {
       if (role === 'Factory' && address) {
         try {
           const balance = await balanceOf(address);
           setTokenBalance(Number(balance));
+          setBalanceFetched(true);
         } catch (err) {
           console.error('Error fetching balance:', err);
         }
       }
     }
-    fetchBalance();
-  }, [role, address, balanceOf]);
+    if (role === 'Factory' && !balanceFetched) {
+      fetchBalance();
+    }
+  }, [role, address, balanceOf, balanceFetched]);
 
   if (!isConnected) {
     return (
@@ -183,33 +200,31 @@ export default function Dashboard() {
   };
 
   // Handler to buy tokens
-  //// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\Dashboard.jsx
-// Handler to buy tokens
-const handleBuyTokens = async () => {
-  if (!buyAmount || isNaN(buyAmount) || Number(buyAmount) <= 0) {
-    setMessage('Enter a valid token amount.');
-    return;
-  }
-  
-  try {
-    // Convert to BigInt for the transaction
-    const amountBigInt = BigInt(buyAmount); // Assuming 18 decimals
+  const handleBuyTokens = async () => {
+    if (!buyAmount || isNaN(buyAmount) || Number(buyAmount) <= 0) {
+      setMessage('Enter a valid token amount.');
+      return;
+    }
     
-    // Call buy with just the amount (not the address)
-    // The contract will use msg.sender as recipient
-    await buy(amountBigInt); 
-    
-    // Refresh balance after purchase
-    const newBalance = await balanceOf(address);
-    setTokenBalance(Number(newBalance)); 
-    
-    setMessage(`Successfully bought ${buyAmount} tokens.`);
-    setBuyAmount('');
-  } catch (err) {
-    console.error('Error buying tokens:', err);
-    setMessage('Transaction failed: ' + err.message);
-  }
-};
+    try {
+      // Convert to BigInt for the transaction (assuming 18 decimals)
+      const amountBigInt = BigInt(buyAmount);
+      
+      // The contract will use msg.sender as recipient
+      await buy(amountBigInt);
+      
+      // Refresh balance after purchase
+      const newBalance = await balanceOf(address);
+      setTokenBalance(Number(newBalance)); 
+      
+      setMessage(`Successfully bought ${buyAmount} tokens.`);
+      setBuyAmount('');
+    } catch (err) {
+      console.error('Error buying tokens:', err);
+      setMessage('Transaction failed: ' + err.message);
+    }
+  };
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">

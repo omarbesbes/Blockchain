@@ -1,85 +1,102 @@
-import { getContract } from 'viem';
-import { useWalletClient, usePublicClient } from 'wagmi';
-import { TransactionManagerAddress, TransactionManagerABI } from '../contracts/TransactionManager';
+import { useWalletClient, usePublicClient } from "wagmi";
+import {
+  TransactionManagerAddress,
+  TransactionManagerABI,
+} from "../contracts/TransactionManager";
 
 export function useTransactionManager() {
+  // For write operations (transactions)
   const { data: walletClient } = useWalletClient();
+  // For read-only (view/pure calls)
   const publicClient = usePublicClient();
 
-  // Create a contract instance for interacting with the TransactionManager
-  const transactionManager = getContract({
-    address: TransactionManagerAddress,
-    abi: TransactionManagerABI,
-    walletClient,
-    publicClient,
-  });
-
-  // Buyer records a buy operation
+  // 1. Buyer initiates a transaction (recordBuyOperation)
   async function recordBuyOperation(seller, productId) {
-    if (!walletClient) throw new Error('No wallet connected');
+    console.log("walletClient", walletClient);
+    if (!walletClient) throw new Error("No wallet connected");
+
     const txHash = await walletClient.writeContract({
       address: TransactionManagerAddress,
       abi: TransactionManagerABI,
-      functionName: 'recordBuyOperation',
+      functionName: "recordBuyOperation",
       args: [seller, productId],
       account: walletClient.account,
     });
-    return publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    return receipt;
   }
 
-  // Seller confirms the sale operation
+  // 2. Seller confirms the transaction (confirmSellOperation)
   async function confirmSellOperation(transactionId) {
-    if (!walletClient) throw new Error('No wallet connected');
+    if (!walletClient) throw new Error("No wallet connected");
+
     const txHash = await walletClient.writeContract({
       address: TransactionManagerAddress,
       abi: TransactionManagerABI,
-      functionName: 'confirmSellOperation',
+      functionName: "confirmSellOperation",
       args: [transactionId],
-      account: walletClient.account,
     });
-    return publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    return receipt;
   }
 
-  // Buyer rates the seller
-  async function buyerRateSeller(transactionId, scoreType, scoreValue, productIdForRating, ratingFactory) {
-    if (!walletClient) throw new Error('No wallet connected');
+  // 3. Buyer rates the seller (buyerRateSeller)
+  async function buyerRateSeller(
+    transactionId,
+    scoreType,
+    scoreValue,
+    productIdForRating,
+    ratingFactory
+  ) {
+    if (!walletClient) throw new Error("No wallet connected");
+
     const txHash = await walletClient.writeContract({
       address: TransactionManagerAddress,
       abi: TransactionManagerABI,
-      functionName: 'buyerRateSeller',
+      functionName: "buyerRateSeller",
       args: [transactionId, scoreType, scoreValue, productIdForRating, ratingFactory],
-      account: walletClient.account,
     });
-    return publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    return receipt;
   }
 
-  // View function: get the pending transaction for a specific product
+  // 4. Get a pending transaction by product ID (read-only)
   async function getPendingTransactionByProduct(productId) {
-    return publicClient.readContract({
+    return await publicClient.readContract({
       address: TransactionManagerAddress,
       abi: TransactionManagerABI,
-      functionName: 'getPendingTransactionByProduct',
+      functionName: "getPendingTransactionByProduct",
       args: [productId],
     });
   }
 
-  // View function: get all pending transactions for a specific product
+  // 5. Get all pending transactions for a product (read-only)
   async function getAllPendingTransactionsByProduct(productId) {
-    return publicClient.readContract({
+    return await publicClient.readContract({
       address: TransactionManagerAddress,
       abi: TransactionManagerABI,
-      functionName: 'getAllPendingTransactionsByProduct',
+      functionName: "getAllPendingTransactionsByProduct",
       args: [productId],
     });
   }
 
-  // View function: check if there is any pending transaction for a specific product
+  // 6. Check if a pending transaction exists for a product (read-only)
   async function hasPendingTransaction(productId) {
-    return publicClient.readContract({
+    return await publicClient.readContract({
       address: TransactionManagerAddress,
       abi: TransactionManagerABI,
-      functionName: 'hasPendingTransaction',
+      functionName: "hasPendingTransaction",
       args: [productId],
+    });
+  }
+
+  // 7. Get a transaction's details using the public mapping getter (read-only)
+  async function getTransaction(txId) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "transactions",
+      args: [txId],
     });
   }
 
@@ -90,5 +107,6 @@ export function useTransactionManager() {
     getPendingTransactionByProduct,
     getAllPendingTransactionsByProduct,
     hasPendingTransaction,
+    getTransaction,
   };
 }

@@ -1,9 +1,11 @@
-//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\ScoringTab.jsx
+// ScoringTab.jsx
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useGetProductsByOwner } from '../hooks/useProductManager';
 import { useStakeholderRegistry } from '../hooks/useStakeholderRegistry';
 import { useScoreEngine } from '../hooks/useScoreEngine';
+import { useTransactionManager } from '../hooks/useTransactionManager';
+import { useToken } from '../hooks/useToken';
 import './ScoringTab.css';
 
 const roleMapping = {
@@ -14,113 +16,143 @@ const roleMapping = {
   5: 'Consumer',
 };
 
-/**
- * Who can vote on which seller role:
- * Key: voter role (myRole),   Value: target role we're allowed to rate
- */
 const allowedVoting = {
-  2: 1, // Factory can vote on Supplier
-  4: 3, // Retailer can vote on Distributor
-  5: 2, // Consumer can vote on Factory
+  2: 1,
+  4: 3,
+  5: 2,
 };
+
+// Constant reward amount (as defined in your contract: 10 * 1e18)
+const REWARD_AMOUNT = "10000000000000000000"; 
 
 export default function ScoringTab() {
   const { address } = useAccount();
   const { getStakeholderType } = useStakeholderRegistry();
   const { products, error: productsError, isPending: productsLoading } = useGetProductsByOwner(address);
-  const { rateStakeholder } = useScoreEngine();
+  const { rateStakeholder, confirmSellOperation, getAllPendingTransactionsByProduct, getTransaction } = useTransactionManager();
+  const { approve } = useToken();
 
   const [myRole, setMyRole] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [sellerAddress, setSellerAddress] = useState(null);
   const [scoreInputs, setScoreInputs] = useState({ score1: '', score2: '', score3: '' });
   const [message, setMessage] = useState('');
+  const [pendingBuyRequests, setPendingBuyRequests] = useState([]);
+  const [votableProducts, setVotableProducts] = useState([]);
 
+  // Flags to ensure data is loaded only once per refresh
+  const [votableFetched, setVotableFetched] = useState(false);
+  const [pendingFetched, setPendingFetched] = useState(false);
+
+  // Fetch the current stakeholder role (only once when address changes)
   useEffect(() => {
     async function fetchRole() {
       if (!address) return;
       try {
         const roleNum = await getStakeholderType(address);
+        console.log('[DEBUG] Fetched role for', address, ':', roleNum);
         setMyRole(Number(roleNum));
       } catch (err) {
         console.error('Error fetching role:', err);
       }
     }
-    fetchRole();
-  }, [address, getStakeholderType]);
+    if (myRole === null) {
+      fetchRole();
+    }
+  }, [address, getStakeholderType, myRole]);
 
-  // Check if user is allowed to vote at all
   const isAllowedToVote = () => myRole in allowedVoting;
 
-  /**
-   * Placeholder function that simulates retrieving the seller’s address & role.
-   * In a real scenario, you would get this from your product details or another contract call.
-   */
+  // Simulated helper: get seller address and role for a product.
   async function getSellerAndRole(productId) {
-    // Example:
-    // const details = await getProductDetails(productId);
-    // const seller = details.previousOwner; // or similar
-    // const sellerRoleNum = await getStakeholderType(seller);
-    // return { sellerAddress: seller, sellerRole: Number(sellerRoleNum) };
-
-    // For demonstration, always returning a "supplier" role:
-    return {
-      sellerAddress: '0xSellerAddressExample',
-      sellerRole: 1, // 1 => 'Supplier'
-    };
-  }
-
-  /**
-   * We only show products if:
-   * 1) We did not mint them ourselves (you actually bought them).
-   * 2) The seller's role matches allowedVoting[myRole].
-   */
-  const filterVotableProducts = async (productList) => {
-    const filtered = [];
-    for (const prodId of productList) {
-      const { sellerAddress: seller, sellerRole } = await getSellerAndRole(prodId);
-      if (seller.toLowerCase() !== address.toLowerCase() && sellerRole === allowedVoting[myRole]) {
-        filtered.push(prodId);
-      }
+    console.log('[DEBUG] Getting seller/role for product:', productId);
+    // For example: if the last digit is even, assume current user is the seller.
+      console.log('[DEBUG] Product', productId, 'is owned by current user:', address);
+      return {
+        sellerAddress: address,
+        sellerRole: myRole || 1,
+      };
+    
     }
-    return filtered;
-  };
+  
 
-  // Track the filtered list of products the user can rate
-  const [votableProducts, setVotableProducts] = useState([]);
-
+  // Filter products eligible for voting (load only once)
   useEffect(() => {
-    if (!products || products.length === 0) {
-      setVotableProducts([]);
-      return;
+    async function loadVotableProducts() {
+      const filtered = [];
+      for (const prodId of products) {
+        const { sellerAddress: seller, sellerRole } = await getSellerAndRole(prodId);
+        console.log('[DEBUG] Checking product:', prodId, 'Seller:', seller, 'Role:', sellerRole);
+        if (seller.toLowerCase() !== address.toLowerCase() && sellerRole === allowedVoting[myRole]) {
+          filtered.push(prodId);
+        }
+      }
+      console.log('[DEBUG] Votable products:', filtered);
+      setVotableProducts(filtered);
+      setVotableFetched(true);
     }
-    if (!isAllowedToVote()) {
-      setVotableProducts([]);
-      return;
+    if (!votableFetched && products && products.length > 0 && isAllowedToVote()) {
+      loadVotableProducts();
     }
-    // Filter out products the user is not supposed to rate
-    (async () => {
-      const results = await filterVotableProducts(products);
-      setVotableProducts(results);
-    })();
-  }, [products, myRole]);
+  }, [products, myRole, votableFetched, address]);
 
-  // When a product is clicked, store relevant info for rating
+  // Fetch pending transactions (load only once)
+  useEffect(() => {
+    async function fetchPendingTransactions() {
+      if (!products || products.length === 0) {
+        setPendingBuyRequests([]);
+        return;
+      }
+      const pending = [];
+      console.log('[DEBUG] Checking pending transactions for products:', products);
+      for (const prodId of products) {
+        const { sellerAddress: seller } = await getSellerAndRole(prodId);
+        console.log('[DEBUG] Product:', prodId, 'Seller:', seller);
+        if (seller.toLowerCase() === address.toLowerCase()) {
+          try {
+            // Get pending transaction IDs for this product
+            const txIds = await getAllPendingTransactionsByProduct(prodId);
+            console.log('[DEBUG] Raw txIds for product', prodId, ':', txIds);
+            const transactionsArray = Array.isArray(txIds) ? txIds : txIds ? [txIds] : [];
+            for (const txId of transactionsArray) {
+              console.log('[DEBUG] Fetching transaction details for txId:', txId);
+              const txDetails = await getTransaction(txId);
+              console.log('[DEBUG] Details for txId', txId, ':', txDetails);
+              pending.push({
+                transactionId: txDetails[0],
+                buyer: txDetails[1],
+                rewardAmount: REWARD_AMOUNT,
+                productId: prodId,
+              });
+            }
+          } catch (e) {
+            console.error('Error fetching pending transactions for product', prodId, e);
+          }
+        }
+      }
+      console.log('[DEBUG] Final pendingBuyRequests:', pending);
+      setPendingBuyRequests(pending);
+      setPendingFetched(true);
+    }
+    if (!pendingFetched && products && products.length > 0) {
+      fetchPendingTransactions();
+    }
+  }, [products, address, pendingFetched, getAllPendingTransactionsByProduct, getTransaction]);
+
   const handleProductClick = async (productId) => {
     const { sellerAddress: sAddr } = await getSellerAndRole(productId);
+    console.log('[DEBUG] Product clicked:', productId, 'Seller:', sAddr);
     setSellerAddress(sAddr);
     setSelectedProduct(productId);
   };
 
-  // Handle score input change
   const handleChange = (e) => {
     setScoreInputs({ ...scoreInputs, [e.target.name]: e.target.value });
   };
 
-  // Submit scores – calling the score engine for each score type (0,1,2 as example)
   const handleSubmit = async () => {
     if (!sellerAddress) return;
-    const scoreTypes = [0, 1, 2]; // Adjust to your real scoring logic
+    const scoreTypes = [0, 1, 2];
     const scoreValues = [scoreInputs.score1, scoreInputs.score2, scoreInputs.score3];
 
     try {
@@ -130,13 +162,13 @@ export default function ScoringTab() {
           setMessage('Score values must be between 1 and 10.');
           return;
         }
+        console.log('[DEBUG] Rating seller:', sellerAddress, 'ScoreType:', scoreTypes[i], 'Value:', value);
         await rateStakeholder(sellerAddress, scoreTypes[i], value);
       }
       setMessage('Scores submitted successfully!');
       setScoreInputs({ score1: '', score2: '', score3: '' });
       setSelectedProduct(null);
       setSellerAddress(null);
-      // Optionally remove this product from votableProducts if you only want one-time rating
       setVotableProducts((prev) => prev.filter((id) => id !== selectedProduct));
     } catch (err) {
       console.error('Error submitting scores:', err);
@@ -144,14 +176,36 @@ export default function ScoringTab() {
     }
   };
 
-  // Render a message if the user is not allowed to vote
-  if (!isAllowedToVote()) {
-    return (
-      <div className="voting-tab-container">
-        <p>Your role ({roleMapping[myRole] || 'Unknown'}) is not permitted to vote.</p>
-      </div>
-    );
-  }
+  const handleConfirm = async (pendingTx) => {
+    try {
+      console.log('[DEBUG] Confirming transaction:', pendingTx);
+      await confirmSellOperation(pendingTx.transactionId);
+      const buyerRoleNum = await getStakeholderType(pendingTx.buyer);
+      const buyerRole = Number(buyerRoleNum);
+      console.log('[DEBUG] Buyer role for tx', pendingTx.transactionId, ':', buyerRole);
+      if (!((myRole === 1 && buyerRole === 2) || (myRole === 2 && buyerRole === 1))) {
+        console.log('[DEBUG] Approving reward for tx', pendingTx.transactionId, 'Amount:', pendingTx.rewardAmount);
+        await approve(address, pendingTx.rewardAmount);
+      }
+      setMessage(`Transaction ${String(pendingTx.transactionId)} confirmed.`);
+      setPendingBuyRequests((prev) => prev.filter((tx) => tx.transactionId !== pendingTx.transactionId));
+    } catch (e) {
+      console.error('Error confirming transaction', e);
+      setMessage(`Error confirming transaction ${String(pendingTx.transactionId)}.`);
+    }
+  };
+
+  const handleCancel = async (pendingTx) => {
+    try {
+      console.log('[DEBUG] Cancelling transaction:', pendingTx);
+      // Implement actual cancellation if supported by your contract
+      setMessage(`Transaction ${String(pendingTx.transactionId)} cancelled.`);
+      setPendingBuyRequests((prev) => prev.filter((tx) => tx.transactionId !== pendingTx.transactionId));
+    } catch (e) {
+      console.error('Error cancelling transaction', e);
+      setMessage(`Error cancelling transaction ${String(pendingTx.transactionId)}.`);
+    }
+  };
 
   return (
     <div className="voting-tab-container">
@@ -166,8 +220,8 @@ export default function ScoringTab() {
       ) : votableProducts.length > 0 ? (
         <ul className="product-list">
           {votableProducts.map((prodId) => (
-            <li key={prodId.toString()} onClick={() => handleProductClick(prodId)}>
-              Product #{prodId.toString()}
+            <li key={String(prodId)} onClick={() => handleProductClick(prodId)}>
+              Product #{String(prodId)}
             </li>
           ))}
         </ul>
@@ -181,39 +235,37 @@ export default function ScoringTab() {
           <p>Enter your scores for the seller (values between 1 and 10):</p>
           <label>
             Score 1:
-            <input
-              type="number"
-              name="score1"
-              value={scoreInputs.score1}
-              onChange={handleChange}
-              min="1"
-              max="10"
-            />
+            <input type="number" name="score1" value={scoreInputs.score1} onChange={handleChange} min="1" max="10" />
           </label>
           <label>
             Score 2:
-            <input
-              type="number"
-              name="score2"
-              value={scoreInputs.score2}
-              onChange={handleChange}
-              min="1"
-              max="10"
-            />
+            <input type="number" name="score2" value={scoreInputs.score2} onChange={handleChange} min="1" max="10" />
           </label>
           <label>
             Score 3:
-            <input
-              type="number"
-              name="score3"
-              value={scoreInputs.score3}
-              onChange={handleChange}
-              min="1"
-              max="10"
-            />
+            <input type="number" name="score3" value={scoreInputs.score3} onChange={handleChange} min="1" max="10" />
           </label>
           <button onClick={handleSubmit}>Submit Scores</button>
         </div>
+      )}
+
+      <h3>Pending Buy Requests</h3>
+      {pendingBuyRequests.length > 0 ? (
+        <ul className="pending-list">
+          {pendingBuyRequests.map((pendingTx) => (
+            <li key={`${String(pendingTx.transactionId)}-${String(pendingTx.productId)}`}>
+              <p>
+                Product #{String(pendingTx.productId)} - Transaction ID: {String(pendingTx.transactionId)}
+              </p>
+              <p>Buyer: {pendingTx.buyer}</p>
+              <p>Reward: {String(pendingTx.rewardAmount)}</p>
+              <button onClick={() => handleConfirm(pendingTx)}>Confirm</button>
+              <button onClick={() => handleCancel(pendingTx)}>Cancel</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>No pending buy requests for your products.</p>
       )}
 
       {message && <p className="message">{message}</p>}

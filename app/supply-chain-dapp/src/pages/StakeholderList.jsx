@@ -1,37 +1,45 @@
-// src/pages/StakeholderList.jsx
+// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\StakeholderList.jsx
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useStakeholderRegistry } from '../hooks/useStakeholderRegistry';
 import { useProductManager, useGetProductsByOwner } from '../hooks/useProductManager';
 import { useScoreEngine } from '../hooks/useScoreEngine';
+import { useWalletClient, usePublicClient } from "wagmi";
+import { useTransactionManager } from '../hooks/useTransactionManager';
 import './StakeholderList.css';
 
 export default function StakeholderList() {
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const { getAllStakeholders, getStakeholderType } = useStakeholderRegistry();
   const { getGlobalScore, getScores } = useScoreEngine();
-  const { buyProduct } = useProductManager(); // Added buyProduct
+  const { recordBuyOperation, hasPendingTransaction } = useTransactionManager();
+  
   const [myRole, setMyRole] = useState(null);
   const [visibleStakeholders, setVisibleStakeholders] = useState([]);
   const [selectedStakeholder, setSelectedStakeholder] = useState(null);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const { products: selectedStakeholderProducts, error: productsError, isPending: productsLoading } =
     useGetProductsByOwner(selectedAddress);
+  
+  // Track product transaction status
+  const [pendingProducts, setPendingProducts] = useState({});
+  const [isCheckingPending, setIsCheckingPending] = useState(false);
 
-    const scoreTypeMapping = {
-      0: 'Trust',
-      1: 'Delivery speed',
-      2: 'Material quality',
-      3: 'Product quality',
-      4: 'Warranty',
-      5: 'Eco rating',
-      6: 'Packaging',
-      7: 'Transparency',
-      8: 'Accuracy',
-      9: 'Delivery',
-      10: 'Price fairness',
-      11: 'Return policy',
-    };
+  const scoreTypeMapping = {
+    0: 'Trust',
+    1: 'Delivery speed',
+    2: 'Material quality',
+    3: 'Product quality',
+    4: 'Warranty',
+    5: 'Eco rating',
+    6: 'Packaging',
+    7: 'Transparency',
+    8: 'Accuracy',
+    9: 'Delivery',
+    10: 'Price fairness',
+    11: 'Return policy',
+  };
+  
   // Role labels
   const roleLabels = {
     0: 'None',
@@ -42,7 +50,7 @@ export default function StakeholderList() {
     5: 'Consumer',
   };
 
-  // ====== 1) Fetch my role ======
+  // ====== 1) Fetch my role (only if not already fetched) ======
   useEffect(() => {
     async function fetchMyRole() {
       if (!address) return;
@@ -53,17 +61,17 @@ export default function StakeholderList() {
         console.error('Error fetching my role:', err);
       }
     }
-    fetchMyRole();
-  }, [address, getStakeholderType]);
+    if (myRole === null) {
+      fetchMyRole();
+    }
+  }, [address, getStakeholderType, myRole]);
 
-  // ==================
-  // 2) Load Stakeholders
-  // ==================
+  // ====== 2) Load Stakeholders (only once, if not already loaded) ======
   useEffect(() => {
     async function loadAndFilterStakeholders() {
       if (!address || myRole === null) return;
 
-      // Decide role to see
+      // Decide role to see based on current user's role
       let allowedRole = null;
       switch (myRole) {
         case 2: // I'm a Factory => see Suppliers
@@ -101,7 +109,7 @@ export default function StakeholderList() {
         try {
           const rNum = await getStakeholderType(sAddr);
           if (Number(rNum) === allowedRole) {
-            // fetch 3 example scores
+            // Fetch 3 example scores
             const trustRaw = await getGlobalScore(sAddr, 0); // TRUST
             const productQualityRaw = await getGlobalScore(sAddr, 3); // PRODUCT_QUALITY
             const deliveryRaw = await getGlobalScore(sAddr, 9); // DELIVERY
@@ -109,7 +117,7 @@ export default function StakeholderList() {
             const allScores = await getScores(sAddr);
             const ratingCount = allScores.length;
 
-            // Convert
+            // Convert values
             const trustScore = Number(trustRaw) / 1e18;
             const productQualityScore = Number(productQualityRaw) / 1e18;
             const deliveryScore = Number(deliveryRaw) / 1e18;
@@ -131,56 +139,74 @@ export default function StakeholderList() {
       setVisibleStakeholders(finalList);
     }
 
-    loadAndFilterStakeholders();
-  }, [address, myRole, getAllStakeholders, getStakeholderType, getGlobalScore, getScores]);
+    // Only load if we haven't fetched stakeholders yet.
+    if (visibleStakeholders.length === 0) {
+      loadAndFilterStakeholders();
+    }
+  }, [address, myRole, getAllStakeholders, getStakeholderType, getGlobalScore, getScores, visibleStakeholders]);
 
-  // ====== 3) On stakeholder card click ======
+  // ====== 3) Check for pending transactions when products load ======
+  useEffect(() => {
+    async function checkPendingTransactions() {
+      if (!selectedStakeholderProducts || selectedStakeholderProducts.length === 0) return;
+      
+      setIsCheckingPending(true);
+      const pendingStatusMap = {};
+      
+      try {
+        for (const prodId of selectedStakeholderProducts) {
+          const isPending = await hasPendingTransaction(prodId.toString());
+          pendingStatusMap[prodId.toString()] = isPending;
+        }
+        setPendingProducts(pendingStatusMap);
+      } catch (err) {
+        console.error('Error checking pending transactions:', err);
+      } finally {
+        setIsCheckingPending(false);
+      }
+    }
+    
+    checkPendingTransactions();
+  }, [selectedStakeholderProducts]); 
+
+  // ====== 4) On stakeholder card click ======
   function handleSelectStakeholder(stakeholderAddress) {
     setSelectedStakeholder(stakeholderAddress);
-    // Also set for the hook
     setSelectedAddress(stakeholderAddress);
-    // Reset pending products when selecting a new stakeholder
     setPendingProducts({});
   }
   
   // ====== 5) Handle buy product ======
-  //// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\StakeholderList.jsx
-async function handleBuyProduct(productId) {
-  try {
-    // Add confirmation step to ensure user is aware
-    if (!window.confirm(`Are you sure you want to purchase Product #${productId}?`)) {
-      return;
-    }
-    
-    console.log("Starting purchase for product:", productId);
-    console.log("Selected stakeholder:", selectedStakeholder);
-    await ethereum.request({
-      method: 'eth_requestAccounts',
-    });
-    // First record the buy operation in TransactionManager
-    await recordBuyOperation(selectedStakeholder, productId);
-    
-    // If we get here, the transaction was successful
-    console.log("Purchase recorded successfully");
-    
-    // Update the pending status for this product immediately
-    setPendingProducts(prev => ({
-      ...prev,
-      [productId]: true
-    }));
-    
-    alert(`Purchase request for Product #${productId} has been recorded. Waiting for seller confirmation.`);
-  } catch (err) {
-    console.error('Failed to record buy operation:', err);
-    
-    // Provide a cleaner error message to the user
-    const errorMessage = err.message || 'Unknown error';
-    const userMessage = errorMessage.includes('wallet') || errorMessage.includes('network') 
-      ? errorMessage 
-      : 'Failed to process your purchase. Please try again.';
+  async function handleBuyProduct(productId) {
+    try {
+      if (!window.confirm(`Are you sure you want to purchase Product #${productId}?`)) {
+        return;
+      }
       
-    alert(userMessage);
-  }
+      console.log("Starting purchase for product:", productId);
+      console.log("Selected stakeholder:", selectedStakeholder);
+      console.log("Wallet connected:", isConnected);
+      // For demonstration, using fixed parameters
+      await recordBuyOperation(selectedStakeholder,productId );
+      
+      console.log("Purchase recorded successfully");
+      
+      setPendingProducts(prev => ({
+        ...prev,
+        [productId]: true
+      }));
+      
+      alert(`Purchase request for Product #${productId} has been recorded. Waiting for seller confirmation.`);
+    } catch (err) {
+      console.error('Failed to record buy operation:', err);
+      
+      const errorMessage = err.message || 'Unknown error';
+      const userMessage = errorMessage.includes('wallet') || errorMessage.includes('network') 
+        ? errorMessage 
+        : 'Failed to process your purchase. Please try again.';
+        
+      alert(userMessage);
+    }
   }
 
   // =======================
@@ -221,24 +247,32 @@ async function handleBuyProduct(productId) {
           </div>
         )}
       </section>
+      
       {selectedStakeholder && (
         <section className="stakeholder-section">
           <h3 className="section-subtitle">
             Products owned by <span className="highlight">{selectedStakeholder}</span>
           </h3>
           {productsLoading && <p>Loading products...</p>}
+          {isCheckingPending && <p>Checking transaction status...</p>}
           {productsError && <p>Error fetching products: {productsError.message}</p>}
           {selectedStakeholderProducts && selectedStakeholderProducts.length > 0 ? (
             <ul className="products-list">
               {selectedStakeholderProducts.map((prodId) => {
                 const idStr = prodId.toString();
+                const isPending = pendingProducts[idStr];
                 return (
                   <li key={idStr} className="products-list-item">
                     <div>
                       <span className="product-label">Product #{idStr}</span>
+                      {isPending && <span className="pending-badge">PENDING</span>}
                     </div>
-                    <button onClick={() => handleBuyProduct(idStr)} className="buy-btn">
-                      Buy This
+                    <button 
+                      onClick={() => handleBuyProduct(idStr)} 
+                      className={`buy-btn ${isPending ? 'disabled' : ''}`}
+                      disabled={isPending}
+                    >
+                      {isPending ? 'Pending' : 'Buy This'}
                     </button>
                   </li>
                 );
@@ -250,4 +284,5 @@ async function handleBuyProduct(productId) {
         </section>
       )}
     </div>
-  );}
+  );
+}
