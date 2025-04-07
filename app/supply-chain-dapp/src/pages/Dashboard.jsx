@@ -19,7 +19,6 @@ export default function Dashboard() {
   const { recordBuyOperation } = useTransactionManager();
 
   // State for role, stakeholder errors, etc.
-  // Initialize role as null so we know it hasn’t been fetched yet
   const [role, setRole] = useState(null);
   const [stakeholderError, setStakeholderError] = useState(null);
 
@@ -30,17 +29,14 @@ export default function Dashboard() {
 
   // State for scores
   const [scores, setScores] = useState([]);
-  // Flag to indicate scores have been fetched
   const [scoresFetched, setScoresFetched] = useState(false);
 
   // Array to hold product details (including metadata)
   const [productDetailsList, setProductDetailsList] = useState([]);
-  // Flag to indicate product details have been fetched
   const [detailsFetched, setDetailsFetched] = useState(false);
 
   // State for token balance and buying tokens
   const [tokenBalance, setTokenBalance] = useState(0);
-  // Flag for token balance fetch (helps distinguish between 0 balance and not fetched yet)
   const [balanceFetched, setBalanceFetched] = useState(false);
   const [buyAmount, setBuyAmount] = useState('');
   const [message, setMessage] = useState('');
@@ -70,7 +66,7 @@ export default function Dashboard() {
       if (!address) return;
       try {
         const typeNum = await getStakeholderType(address);
-        const roleMapping = {
+        const roleMap = {
           0: 'None',
           1: 'Supplier',
           2: 'Factory',
@@ -78,7 +74,7 @@ export default function Dashboard() {
           4: 'Retailer',
           5: 'Consumer',
         };
-        setRole(roleMapping[Number(typeNum)] || 'Unknown');
+        setRole(roleMap[Number(typeNum)] || 'Unknown');
       } catch (err) {
         console.error('Failed to get stakeholder type:', err);
         setStakeholderError('Stakeholder not registered');
@@ -99,7 +95,7 @@ export default function Dashboard() {
         const scoresData = await Promise.all(
           applicableTypes.map(async (scoreId) => {
             const rawScore = await getGlobalScore(address, scoreId);
-            const formattedScore = Number(rawScore) / 1e18; // Divide by 1e18 to get the human-readable score
+            const formattedScore = Number(rawScore) / 1e18;
             return { name: scoreTypeMapping[scoreId] || `Score ${scoreId}`, value: formattedScore };
           })
         );
@@ -161,7 +157,7 @@ export default function Dashboard() {
 
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="dashboard-container">
         <p>Please connect your wallet to view your dashboard.</p>
       </div>
     );
@@ -211,14 +207,9 @@ export default function Dashboard() {
     try {
       // Convert to BigInt for the transaction (assuming 18 decimals)
       const amountBigInt = BigInt(buyAmount);
-      
-      // The contract will use msg.sender as recipient
       await buy(amountBigInt);
-      
-      // Refresh balance after purchase
       const newBalance = await balanceOf(address);
       setTokenBalance(Number(newBalance)); 
-      
       setMessage(`Successfully bought ${buyAmount} tokens.`);
       setBuyAmount('');
     } catch (err) {
@@ -231,14 +222,14 @@ export default function Dashboard() {
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>Dashboard</h1>
-        <div>
+        <div className="user-info">
           <span className="role-badge">Role: {role || 'Loading...'}</span>
           <p className="account-address">Account: {address}</p>
           {stakeholderError && <p className="error-message">{stakeholderError}</p>}
         </div>
       </header>
 
-      {/* Section: Display the user's products, with ID + metadata */}
+      {/* Section: Display the user's products as cards */}
       <section className="dashboard-section">
         <h2>Your Products</h2>
         {productsLoading ? (
@@ -246,18 +237,14 @@ export default function Dashboard() {
         ) : productsError ? (
           <p className="error-message">Failed to load products: {productsError.message}</p>
         ) : productDetailsList && productDetailsList.length > 0 ? (
-          <ul>
+          <div className="cards-container">
             {productDetailsList.map((item) => (
-              <li key={item.id}>
-                <p>
-                  <strong>Product ID:</strong> {item.id}
-                </p>
-                <p>
-                  <strong>Metadata:</strong> {item.metadataURI}
-                </p>
-              </li>
+              <div key={item.id} className="product-card">
+                <p className="product-id"><strong>Product ID:</strong> {item.id}</p>
+                <p className="product-metadata"><strong>Metadata:</strong> {item.metadataURI}</p>
+              </div>
             ))}
-          </ul>
+          </div>
         ) : (
           <p>No products found.</p>
         )}
@@ -265,13 +252,13 @@ export default function Dashboard() {
 
       {/* Section: Show applicable scores for this stakeholder */}
       <section className="dashboard-section">
-        <h2>Your scores</h2>
+        <h2>Your Scores</h2>
         {scores.length === 0 ? (
           <p>Loading scores...</p>
         ) : (
-          <ul>
+          <ul className="scores-list">
             {scores.map((score, index) => (
-              <li key={index}>
+              <li key={index} className="score-item">
                 <strong>{score.name}:</strong> {score.value.toString()}
               </li>
             ))}
@@ -339,7 +326,7 @@ export default function Dashboard() {
               Buy Tokens
             </button>
           </div>
-          {message && <p>{message}</p>}
+          {message && <p className="message">{message}</p>}
         </section>
       )}
     </div>

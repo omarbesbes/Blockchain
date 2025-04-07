@@ -1,130 +1,195 @@
-/* Dashboard.css */
-
-/* Overall container styling */
-.dashboard-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem;
-    background-color: #f5f5f5;
-    font-family: 'Roboto', sans-serif;
-  }
-  
-  /* Header styles */
-  .dashboard-header {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-  }
-  
-  .dashboard-header h1 {
-    font-size: 2.5rem;
-    font-weight: bold;
-    color: #333;
-  }
-  
-  .role-badge {
-    background-color: #007bff;
-    color: #fff;
-    padding: 0.5rem 1rem;
-    border-radius: 999px;
-    font-weight: 600;
-  }
-  
-  /* Section container styling */
-  .dashboard-section {
-    background-color: #fff;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-  
-  .dashboard-section h2 {
-    font-size: 1.75rem;
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 1rem;
-  }
-  
-  /* Button styling */
-  .btn {
-    display: inline-block;
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
-    font-weight: 500;
-    border-radius: 4px;
-    transition: background-color 0.3s ease;
-    border: none;
-    cursor: pointer;
-  }
-  
-  .btn-primary {
-    background-color: #007bff;
-    color: #fff;
-  }
-  
-  .btn-primary:hover {
-    background-color: #0056b3;
-  }
-  
-  .btn-success {
-    background-color: #28a745;
-    color: #fff;
-  }
-  
-  .btn-success:hover {
-    background-color: #1e7e34;
-  }
-  
-  /* Input styling */
-  .dashboard-input {
-    flex: 1;
-    border: 1px solid #ccc;
-    padding: 0.75rem;
-    border-radius: 4px;
-    transition: border-color 0.3s ease;
-  }
-  
-  .dashboard-input:focus {
-    outline: none;
-    border-color: #007bff;
-  }
-  
-  /* Responsive adjustments */
-  @media (max-width: 768px) {
-    .dashboard-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-  }
-  /* Dashboard.css */
-.account-address {
-  font-size: 1rem;
-  color: #555;
-  margin-top: 0.5rem;
+/* Global Styles */
+body, html {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f7f7f7;
 }
 
-/* Token section styling */
+/* Dashboard Container */
+.dashboard-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Dashboard Header */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  font-size: 2rem;
+  color: #333;
+}
+
+.user-info {
+  text-align: right;
+}
+
+.role-badge {
+  display: inline-block;
+  background-color: #007bff;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  margin-bottom: 5px;
+}
+
+.account-address {
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0;
+}
+
+.error-message {
+  color: red;
+  font-weight: bold;
+}
+
+/* Dashboard Sections */
+.dashboard-section {
+  background: #fff;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.dashboard-section h2 {
+  margin-top: 0;
+  color: #333;
+}
+
+/* Cards Container for Products */
+.cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-gap: 20px;
+}
+
+.product-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.product-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.product-id,
+.product-metadata {
+  margin: 0;
+  padding: 5px 0;
+  color: #555;
+}
+
+.product-id strong,
+.product-metadata strong {
+  color: #333;
+}
+
+/* Scores List */
+.scores-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.score-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #eaeaea;
+  color: #333;
+}
+
+.score-item:last-child {
+  border-bottom: none;
+}
+
+/* Metadata Update Section */
+.metadata-update {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.dashboard-input {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Buttons */
+.btn {
+  padding: 10px 20px;
+  background-color: #007bff;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn:hover {
+  background-color: #0056b3;
+}
+
+.btn-primary {
+  background-color: #28a745;
+}
+
+.btn-primary:hover {
+  background-color: #218838;
+}
+
+/* Token Section */
 .token-section {
-    /* Inherit common dashboard section styles */
-    /* Additional styling for token section if needed */
-    border: 1px solid #ccc;
-    padding: 1rem;
-    margin-top: 1rem;
-    border-radius: 6px;
+  text-align: center;
 }
 
 .token-buy {
   display: flex;
-  margin-top: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
 }
 
-.token-buy input {
-  margin-right: 0.5rem;
+/* Message Display */
+.message {
+  margin-top: 15px;
+  font-size: 1rem;
+  color: #28a745;
+  text-align: center;
 }
 
-.token-buy button {
-  min-width: 100px;
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .user-info {
+    text-align: left;
+    margin-top: 10px;
+  }
 }

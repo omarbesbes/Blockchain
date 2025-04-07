@@ -235,9 +235,16 @@ export default function ScoringTab() {
   const handleProductClick = async (productId) => {
     const { sellerAddress: sAddr, sellerRole: sRole } = await getSellerAndRole(productId);
     console.log('[DEBUG] Product clicked:', productId, 'Seller:', sAddr, 'SellerRole:', sRole);
-    setSellerAddress(sAddr);
-    setSelectedProduct(productId);
-    setSelectedSellerRole(sRole);
+    // Toggle the selected product: if already selected, unselect it.
+    if (selectedProduct === productId) {
+      setSelectedProduct(null);
+      setSellerAddress(null);
+      setSelectedSellerRole(null);
+    } else {
+      setSellerAddress(sAddr);
+      setSelectedProduct(productId);
+      setSelectedSellerRole(sRole);
+    }
   };
 
   const handleChange = (e) => {
@@ -330,39 +337,36 @@ export default function ScoringTab() {
       ) : votableProducts.length > 0 ? (
         <ul className="product-list">
           {votableProducts.map((prodId) => (
-            <li
-              key={String(prodId)}
-              onClick={() => handleProductClick(prodId)}
-              className={selectedProduct === prodId ? 'selected-product' : ''}
-            >
-              Product #{String(prodId)}
+            <li key={String(prodId)} className={selectedProduct === prodId ? 'selected-product' : ''}>
+              <div className="product-header" onClick={() => handleProductClick(prodId)}>
+                Product #{String(prodId)}
+              </div>
+              {selectedProduct === prodId && sellerAddress && (
+                <div className="score-form">
+                  <h3>Rate Seller: {sellerAddress}</h3>
+                  <p>Enter your scores for the seller (values between 1 and 10):</p>
+                  {getRoleBasedScoreTypes(selectedSellerRole).map((typeId) => (
+                    <label key={typeId} style={{ display: 'block', marginBottom: '8px' }}>
+                      {scoreTypeMapping[typeId]}:
+                      <input
+                        type="number"
+                        name={`score_${typeId}`}
+                        value={scoreInputs[`score_${typeId}`] ?? ''}
+                        onChange={handleChange}
+                        min="1"
+                        max="10"
+                        style={{ marginLeft: '8px' }}
+                      />
+                    </label>
+                  ))}
+                  <button onClick={handleSubmit}>Submit Scores</button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
       ) : (
         <p>No products found that you can vote on.</p>
-      )}
-
-      {selectedProduct && sellerAddress && (
-        <div className="score-form">
-          <h3>Rate Seller: {sellerAddress}</h3>
-          <p>Enter your scores for the seller (values between 1 and 10):</p>
-          {getRoleBasedScoreTypes(selectedSellerRole).map((typeId) => (
-            <label key={typeId} style={{ display: 'block', marginBottom: '8px' }}>
-              {scoreTypeMapping[typeId]}:
-              <input
-                type="number"
-                name={`score_${typeId}`}
-                value={scoreInputs[`score_${typeId}`] ?? ''}
-                onChange={handleChange}
-                min="1"
-                max="10"
-                style={{ marginLeft: '8px' }}
-              />
-            </label>
-          ))}
-          <button onClick={handleSubmit}>Submit Scores</button>
-        </div>
       )}
 
       <h3>Pending Buy Requests</h3>
