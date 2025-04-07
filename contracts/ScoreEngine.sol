@@ -20,9 +20,6 @@ contract ScoreEngine is Ownable {
     // Reference to your StakeholderRegistry
     StakeholderRegistry private registry;
 
-    // Reference to the DisputeManager (if needed)
-    DisputeManager private disputeManager;
-
     // Reference to the ProductManager
     ProductManager public productManager;
 
@@ -41,8 +38,8 @@ contract ScoreEngine is Ownable {
      *
      *  - Supplier (scored by Factory): TRUST, DELIVERY_SPEED, MATERIAL_QUALITY
      *  - Factory (scored by Consumer): PRODUCT_QUALITY, WARRANTY, ECO_RATING
-     *  - Retailer (scored by Distributor): PACKAGING, TRANSPARENCY, ACCURACY
-     *  - Distributor (scored by Consumer): DELIVERY, PRICE_FAIRNESS, RETURN_POLICY
+     *  - Distributor (scored by Distributor): PACKAGING, TRANSPARENCY, ACCURACY
+     *  - Retailer (scored by Consumer): DELIVERY, PRICE_FAIRNESS, RETURN_POLICY
      */
     enum ScoreType {
         TRUST,              // 0
@@ -86,6 +83,7 @@ contract ScoreEngine is Ownable {
         ScoreType scoreType;
         uint256 value;
         address rater;
+        address rated;
         uint256 timestamp;
     }
     mapping(uint256 => ScoreRecord) private scoreHistory;
@@ -102,11 +100,10 @@ contract ScoreEngine is Ownable {
     );
 
     /**
-     * @dev Constructor sets references to StakeholderRegistry and DisputeManager.
+     * @dev Constructor.
      */
-    constructor (address _registryAddress, address _disputeManagerAddress, address _token, address _productManagerAddress) Ownable(msg.sender) {
+    constructor (address _registryAddress, address _token, address _productManagerAddress) Ownable(msg.sender) {
         registry = StakeholderRegistry(_registryAddress);
-        disputeManager = DisputeManager(payable(_disputeManagerAddress));
         token = IERC20(_token);
         productManager = ProductManager(_productManagerAddress);
     }
@@ -169,6 +166,7 @@ contract ScoreEngine is Ownable {
             scoreType: _scoreType,
             value: newEMA,
             rater: tx.origin,
+            rated: _rated,
             timestamp: block.timestamp
         });
         stakeholderScoreIds[_rated].push(newScoreId);
@@ -319,6 +317,7 @@ contract ScoreEngine is Ownable {
             scoreType: _scoreType,
             value: _newScore,
             rater: msg.sender,
+            rated: _stakeholder,
             timestamp: block.timestamp
         });
         stakeholderScoreIds[_stakeholder].push(manualScoreId);

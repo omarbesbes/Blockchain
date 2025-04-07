@@ -65,25 +65,24 @@ describe("TransactionManager", function () {
     productManager = await ProductManager.deploy();
     await productManager.waitForDeployment();
 
-    // 4. Deploy DisputeManager (dummy for ScoreEngine)
-    DisputeManager = await ethers.getContractFactory("DisputeManager");
-    disputeManager = await DisputeManager.deploy(await registry.getAddress());
-    await disputeManager.waitForDeployment();
-
-    // 5. Deploy Token
+    // Deploy Token
     Token = await ethers.getContractFactory("Token");
     token = await Token.deploy();
     await token.waitForDeployment();
 
-    // 6. Deploy ScoreEngine
+    // Deploy ScoreEngine
     ScoreEngine = await ethers.getContractFactory("ScoreEngine");
     scoreEngine = await ScoreEngine.deploy(
       await registry.getAddress(),
-      await disputeManager.getAddress(),
       await token.getAddress(),
       await productManager.getAddress()
     );
     await scoreEngine.waitForDeployment();
+
+    // 4. Deploy DisputeManager (dummy for ScoreEngine)
+    DisputeManager = await ethers.getContractFactory("DisputeManager");
+    disputeManager = await DisputeManager.deploy(await registry.getAddress(),await scoreEngine.getAddress());
+    await disputeManager.waitForDeployment();
 
     // 7. Distribute tokens
     await token.transfer(await factory.getAddress(), ethers.parseUnits("1000", "ether"));
@@ -101,7 +100,8 @@ describe("TransactionManager", function () {
       await registry.getAddress(),
       await productManager.getAddress(),
       await scoreEngine.getAddress(),
-      await token.getAddress()
+      await token.getAddress(),
+      await disputeManager.getAddress()
     );
     await transactionManager.waitForDeployment();
   });
@@ -162,7 +162,7 @@ describe("TransactionManager", function () {
           await distributor.getAddress(),
           0
         )
-      ).to.be.revertedWith("Invalid buyer-seller role combination for non-factory transaction");
+      ).to.be.revertedWith("Invalid buyer-seller role combination for transaction");
     });
   });
 
@@ -209,7 +209,7 @@ describe("TransactionManager", function () {
         transactionManager
           .connect(consumer)
           .recordBuyOperation(await factory.getAddress(), mintedProductId)
-      ).to.be.revertedWith("Invalid buyer-seller role combination for non-factory transaction");
+      ).to.be.revertedWith("Invalid buyer-seller role combination for transaction");
     });
   });
 

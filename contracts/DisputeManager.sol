@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StakeholderRegistry.sol";
+import "./ScoreEngine.sol";
 
 /**
  * @title DisputeManager
@@ -21,12 +22,9 @@ import "./StakeholderRegistry.sol";
  * In addition, challenges are disallowed if the respondent is a consumer.
  */
 contract DisputeManager is Ownable {
-    // Set owner on deployment.
-    constructor(address registryAddress) Ownable(msg.sender) {
-        registry = StakeholderRegistry(registryAddress);
-    }
 
     StakeholderRegistry public registry;
+    ScoreEngine public scoreEngine;
     uint public constant DEPOSIT_AMOUNT = 1 ether;
     uint public constant VOTING_PERIOD = 1 days;
     
@@ -55,11 +53,30 @@ contract DisputeManager is Ownable {
     mapping(uint => Dispute) public disputes;
     mapping(uint => mapping(address => bool)) public hasVoted;
     mapping(uint => mapping(address => bool)) public disputeVoteChoice;
+    mapping(address => uint) public disputesRaisedCount;
+    mapping(address => uint) public disputesWonCount;
+
+
+    // hasPurchasedFrom[voter][seller] is true if the voter has bought from that seller.
+    mapping(address => mapping(address => bool)) public hasPurchasedFrom;
     
     event DisputeInitiated(uint disputeId, uint ratingId, address indexed challenger, address indexed respondent);
     event RespondedToDispute(uint disputeId, address indexed respondent);
     event VoteCast(uint disputeId, address indexed voter, bool supportRespondent);
     event DisputeFinalized(uint disputeId, DisputeOutcome outcome);
+
+
+    // Set owner on deployment.
+    constructor(address registryAddress, address scoreEngineAddress) Ownable(msg.sender) {
+        registry = StakeholderRegistry(registryAddress);
+        scoreEngine = ScoreEngine(scoreEngineAddress);
+    }
+
+    // This function is called (by TransactionManager) whenever a buyer
+    // purchases from a seller, so that the buyer becomes eligible to vote on that seller's disputes.
+    function recordPurchase(address buyer, address seller) external {
+        hasPurchasedFrom[buyer][seller] = true;
+    }  
 
     /**
      * @notice Initiates a dispute.
@@ -77,6 +94,11 @@ contract DisputeManager is Ownable {
         // Check via StakeholderRegistry: challenges not allowed if the respondent is a Consumer.
         require(registry.getRole(_respondent) != StakeholderRegistry.Role.Consumer, "Challenging not allowed if rater is a consumer");
 
+        ScoreEngine.ScoreRecord memory scoreRec = scoreEngine.getScoreById(_ratingId);
+
+        // Verify that the stakeholder who was rated in the score is the one initiating the dispute.
+        require(scoreRec.rated == msg.sender, "Only the rated stakeholder can initiate a dispute on this rating");
+
         disputeCounter++;
         uint disputeId = disputeCounter;
         Dispute storage disp = disputes[disputeId];
@@ -90,7 +112,8 @@ contract DisputeManager is Ownable {
         disp.depositsComplete = false;
         disp.finalized = false;
         disp.exists = true;
-        
+
+        disputesRaisedCount[msg.sender]++;
         emit DisputeInitiated(disputeId, _ratingId, msg.sender, _respondent);
         return disputeId;
     }
@@ -129,6 +152,9 @@ contract DisputeManager is Ownable {
         require(disputes[_disputeId].depositsComplete, "Deposits not complete yet");
         require(block.timestamp <= disputes[_disputeId].votingDeadline, "Voting period has ended");
         require(!hasVoted[_disputeId][msg.sender], "Voter has already voted");
+
+        require(hasPurchasedFrom[msg.sender][disputes[_disputeId].challenger], "Not eligible to vote: must have purchased from the challenger");
+
 
         hasVoted[_disputeId][msg.sender] = true;
         disputeVoteChoice[_disputeId][msg.sender] = supportRespondent;
@@ -172,6 +198,7 @@ contract DisputeManager is Ownable {
         if (disputes[_disputeId].outcome == DisputeOutcome.RespondentWins) {
             _finalizeRespondentWins(_disputeId);
         } else {
+            disputesWonCount[disputes[_disputeId].challenger]++;
             _finalizeChallengerWins(_disputeId);
         }
     }
@@ -250,6 +277,43 @@ contract DisputeManager is Ownable {
             disp.voters,
             disp.finalized
         );
+    }
+
+    // Returns an array of dispute IDs that the provided voter is allowed to vote on.
+    function getEligibleDisputes(address voter) external view returns (uint[] memory) {
+        uint eligibleCount = 0;
+        // First pass: count how many disputes are eligible.
+        for (uint i = 1; i <= disputeCounter; i++) {
+            Dispute storage dispute = disputes[i];
+            if (
+                !dispute.finalized && 
+                block.timestamp < dispute.votingDeadline &&
+                hasPurchasedFrom[voter][dispute.challenger] &&
+                !hasVoted[i][voter]
+            ) {
+                eligibleCount++;
+            }
+        }
+        
+        // Allocate an array with the appropriate size.
+        uint[] memory eligibleDisputes = new uint[](eligibleCount);
+        uint index = 0;
+        
+        // Second pass: collect the dispute IDs.
+        for (uint i = 1; i <= disputeCounter; i++) {
+            Dispute storage dispute = disputes[i];
+            if (
+                !dispute.finalized && 
+                block.timestamp < dispute.votingDeadline &&
+                hasPurchasedFrom[voter][dispute.challenger] &&
+                !hasVoted[i][voter]
+            ) {
+                eligibleDisputes[index] = i;
+                index++;
+            }
+        }
+        
+        return eligibleDisputes;
     }
     
     receive() external payable {}

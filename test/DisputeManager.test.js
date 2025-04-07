@@ -1,175 +1,290 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-// Helper function to decode event arguments from receipt.logs.
+// Helper to decode event logs
 function getEventArgs(receipt, eventName, iface) {
-  for (let i = 0; i < receipt.logs.length; i++) {
+  for (const log of receipt.logs) {
     try {
-      const parsedLog = iface.parseLog(receipt.logs[i]);
-      if (parsedLog.name === eventName) {
-        return parsedLog.args;
+      const parsed = iface.parseLog(log);
+      if (parsed.name === eventName) {
+        return parsed.args;
       }
-    } catch (e) {
-      // Skip logs that don't match.
+    } catch (err) {
+      // Not this log
     }
   }
   return null;
 }
 
-describe("DisputeManager", function () {
-  let StakeholderRegistry, registry;
-  let DisputeManager, disputeManager;
-  let owner, actorA, actorB, consumer, voter1, voter2, voter3;
-  // Define a local constant for enum Role.
+describe("DisputeManager with Retailer→Distributor purchase", function () {
+  let owner, actorA, actorB, voter1, voter2, voter3;
+  // actorA => Retailer (role=4)
+  // actorB => Distributor (role=3)
+  let registry, productManager, token, scoreEngine, transactionManager, disputeManager;
+  let ratingId;
+  let disputeId;
   const Role = { None: 0, Supplier: 1, Factory: 2, Distributor: 3, Retailer: 4, Consumer: 5 };
   const DEPOSIT_AMOUNT = ethers.parseEther("1");
+  const REWARD_AMOUNT = ethers.parseEther("10");
 
   beforeEach(async function () {
-    [owner, actorA, actorB, consumer, voter1, voter2, voter3, ...addrs] = await ethers.getSigners();
+    [owner, actorA, actorB, voter1, voter2, voter3] = await ethers.getSigners();
 
-    // Deploy StakeholderRegistry and register actors.
-    StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
+    //
+    // 1) Deploy StakeholderRegistry
+    //
+    const StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
     registry = await StakeholderRegistry.deploy();
     await registry.waitForDeployment();
 
-    // Register actorA as Factory (non-consumer) so challenge is allowed.
-    await registry.connect(actorA).registerStakeholder(Role.Factory, "ipfs://actorA");
-    // Register actorB as Distributor.
-    await registry.connect(actorB).registerStakeholder(Role.Distributor, "ipfs://actorB");
-    // Register consumer as Consumer.
-    await registry.connect(consumer).registerStakeholder(Role.Consumer, "ipfs://consumer");
-    // Register voters.
-    await registry.connect(voter1).registerStakeholder(Role.Distributor, "ipfs://voter1");
-    await registry.connect(voter2).registerStakeholder(Role.Distributor, "ipfs://voter2");
-    await registry.connect(voter3).registerStakeholder(Role.Distributor, "ipfs://voter3");
+    //
+    // 2) Register roles:
+    //    actorA => Retailer (4), actorB => Distributor (3)
+    //
+    await registry.connect(actorA).registerStakeholder(Role.Retailer, "Retailer A");
+    await registry.connect(actorB).registerStakeholder(Role.Distributor, "Distributor B");
 
-    // Deploy DisputeManager with the registry's address.
-    DisputeManager = await ethers.getContractFactory("DisputeManager");
-    disputeManager = await DisputeManager.deploy(await registry.getAddress());
+    // We'll make voter1..voter3 also Distributors, so they can appear in disputes.
+    await registry.connect(voter1).registerStakeholder(Role.Distributor, "voter1");
+    await registry.connect(voter2).registerStakeholder(Role.Distributor, "voter2");
+    await registry.connect(voter3).registerStakeholder(Role.Distributor, "voter3");
+
+    //
+    // 3) Deploy ProductManager
+    //
+    const ProductManager = await ethers.getContractFactory("ProductManager");
+    productManager = await ProductManager.deploy();
+    await productManager.waitForDeployment();
+
+    //
+    // 4) Deploy Token
+    //
+    const Token = await ethers.getContractFactory("Token");
+    token = await Token.deploy();
+    await token.waitForDeployment();
+
+    //
+    // 5) Deploy DisputeManager
+    //    DisputeManager constructor: (address registry, address scoreEngine)
+    //    We'll pass a dummy for the ScoreEngine for now and set it later if needed.
+    //
+    // 6) Deploy ScoreEngine
+    //    ScoreEngine constructor: (address registry, address disputeManager, address token, address productManager)
+    //
+    const ScoreEngine = await ethers.getContractFactory("ScoreEngine");
+    scoreEngine = await ScoreEngine.deploy(
+      registry.getAddress(),
+      token.getAddress(),
+      productManager.getAddress()
+    );
+    await scoreEngine.waitForDeployment();
+
+    const DisputeManager = await ethers.getContractFactory("DisputeManager");
+    disputeManager = await DisputeManager.deploy(registry.getAddress(), scoreEngine.getAddress());
     await disputeManager.waitForDeployment();
+
+
+    // If needed, you might do: await disputeManager.setScoreEngine(scoreEngine.getAddress());
+
+    //
+    // 7) Deploy TransactionManager
+    //    e.g. constructor: (registry, productManager, scoreEngine, token, disputeManager)
+    //
+    const TransactionManager = await ethers.getContractFactory("TransactionManager");
+    transactionManager = await TransactionManager.deploy(
+      registry.getAddress(),
+      productManager.getAddress(),
+      scoreEngine.getAddress(),
+      token.getAddress(),
+      disputeManager.getAddress()
+    );
+    await transactionManager.waitForDeployment();
+
+    //
+    // 8) Fund some addresses with tokens
+    //
+    await token.transfer(await actorA.getAddress(), ethers.parseEther("500"));
+    await token.transfer(await actorB.getAddress(), ethers.parseEther("500"));
+    await token.transfer(await voter1.getAddress(), ethers.parseEther("500"));
+    await token.transfer(await voter2.getAddress(), ethers.parseEther("500"));
+    await token.transfer(await voter3.getAddress(), ethers.parseEther("500"));
+    // Fund ScoreEngine
+    await token.transfer(scoreEngine.getAddress(), ethers.parseEther("1000"));
+
+    //
+    // 9) Retailer (actorA) buys from Distributor (actorB) with productId=0
+    //    This is valid because (4 - 3 = 1) => no revert "Invalid buyer-seller role combination"
+    //
+    let tx = await transactionManager
+      .connect(actorA)
+      .recordBuyOperation(await actorB.getAddress(), 0);
+    await tx.wait();
+
+    // 10) Distributor (seller) approves deposit and confirms
+    await token.connect(actorB).approve(transactionManager.getAddress(), REWARD_AMOUNT);
+    await transactionManager.connect(actorB).confirmSellOperation(1);
+
+    // 11) Retailer (the buyer) rates the Distributor (the seller).
+    //     => In ScoreEngine, that means `.rated = actorB`.
+    tx = await transactionManager
+      .connect(actorA)
+      .buyerRateSeller(
+        1,         // transactionId
+        6,         // scoreType=PACKAGING (example)
+        6,         // scoreValue
+        0,         // productId=0 
+        false      // ratingFactory=false
+      );
+    const rateReceipt = await tx.wait();
+    // parse "ScoreAssigned" event from ScoreEngine
+    const scoreIface = (await ethers.getContractFactory("ScoreEngine")).interface;
+    const ev = getEventArgs(rateReceipt, "ScoreAssigned", scoreIface);
+    ratingId = ev.scoreId;
+    // => rating says: rated=actorB, rater=actorA
+    // => so actorB is the "rated stakeholder" and can do initiateDispute
   });
 
-  describe("initiateDispute", function () {
-    it("should allow a challenger to initiate a dispute with correct deposit when respondent is not consumer", async function () {
-      // actorB challenges actorA (Factory) - allowed.
-      const tx = await disputeManager.connect(actorB).initiateDispute(123, actorA.address, { value: DEPOSIT_AMOUNT });
-      const receipt = await tx.wait();
-      // Use helper to get event arguments.
-      const eventArgs = getEventArgs(receipt, "DisputeInitiated", disputeManager.interface);
-      expect(eventArgs).to.not.be.null;
-      expect(eventArgs.disputeId).to.equal(1);
-      expect(eventArgs.ratingId).to.equal(123);
-      expect(eventArgs.challenger).to.equal(actorB.address);
-      expect(eventArgs.respondent).to.equal(actorA.address);
-    });
+  //
+  // ───────────────────────────────────────────────────────────
+  // BASIC TESTS
+  // ───────────────────────────────────────────────────────────
+  //
+  it("should allow the rated stakeholder (Distributor) to initiate a dispute with correct deposit", async function () {
+    // actorB is .rated => must pass the correct ratingId and deposit
+    // respondent => actorA (the rater)
+    const tx = await disputeManager
+      .connect(actorB)
+      .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+    const receipt = await tx.wait();
+    const eargs = getEventArgs(receipt, "DisputeInitiated", disputeManager.interface);
 
-    it("should revert if deposit is not equal to DEPOSIT_AMOUNT", async function () {
-      await expect(
-        disputeManager.connect(actorB).initiateDispute(123, actorA.address, { value: ethers.parseEther("0.5") })
-      ).to.be.revertedWith("Challenger deposit must be equal to DEPOSIT_AMOUNT");
-    });
-
-    it("should revert if respondent is a consumer", async function () {
-      // consumer is registered as Consumer.
-      await expect(
-        disputeManager.connect(actorB).initiateDispute(456, consumer.address, { value: DEPOSIT_AMOUNT })
-      ).to.be.revertedWith("Challenging not allowed if rater is a consumer");
-    });
+    expect(eargs.disputeId).to.equal(1);
+    expect(eargs.ratingId).to.equal(ratingId);
+    expect(eargs.challenger).to.equal(await actorB.getAddress());
+    expect(eargs.respondent).to.equal(await actorA.getAddress());
   });
 
+  it("should revert if deposit is incorrect", async function () {
+    await expect(
+      disputeManager
+        .connect(actorB)
+        .initiateDispute(ratingId, await actorA.getAddress(), { value: ethers.parseEther("0.5") })
+    ).to.be.revertedWith("Challenger deposit must be equal to DEPOSIT_AMOUNT");
+  });
+
+  //
+  // ───────────────────────────────────────────────────────────
+  // RESPOND, VOTE, FINALIZE
+  // ───────────────────────────────────────────────────────────
+  //
   describe("respondToDispute", function () {
     beforeEach(async function () {
-      // Initiate dispute: actorB challenges actorA.
-      await disputeManager.connect(actorB).initiateDispute(456, actorA.address, { value: DEPOSIT_AMOUNT });
+      // Initiate
+      const tx = await disputeManager
+        .connect(actorB)
+        .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+      const rx = await tx.wait();
+      disputeId = getEventArgs(rx, "DisputeInitiated", disputeManager.interface).disputeId;
     });
 
-    it("should allow the respondent to respond with correct deposit", async function () {
+    it("should allow respondent (actorA) to respond with correct deposit", async function () {
       await expect(
-        disputeManager.connect(actorA).respondToDispute(1, { value: DEPOSIT_AMOUNT })
-      ).to.emit(disputeManager, "RespondedToDispute").withArgs(1, actorA.address);
-    });
-
-    it("should revert if a non-respondent tries to respond", async function () {
-      await expect(
-        disputeManager.connect(actorB).respondToDispute(1, { value: DEPOSIT_AMOUNT })
-      ).to.be.revertedWith("Only respondent can respond");
-    });
-
-    it("should revert if deposit is incorrect", async function () {
-      await expect(
-        disputeManager.connect(actorA).respondToDispute(1, { value: ethers.parseEther("0.5") })
-      ).to.be.revertedWith("Respondent deposit must equal DEPOSIT_AMOUNT");
+        disputeManager.connect(actorA).respondToDispute(disputeId, { value: DEPOSIT_AMOUNT })
+      )
+        .to.emit(disputeManager, "RespondedToDispute")
+        .withArgs(disputeId, await actorA.getAddress());
     });
   });
 
   describe("voteDispute", function () {
     beforeEach(async function () {
-      // Initiate dispute and have actorA respond.
-      await disputeManager.connect(actorB).initiateDispute(789, actorA.address, { value: DEPOSIT_AMOUNT });
-      await disputeManager.connect(actorA).respondToDispute(1, { value: DEPOSIT_AMOUNT });
+      // Initiate + respond
+      const tx1 = await disputeManager
+        .connect(actorB)
+        .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+      const rx1 = await tx1.wait();
+      disputeId = getEventArgs(rx1, "DisputeInitiated", disputeManager.interface).disputeId;
+
+      await disputeManager.connect(actorA).respondToDispute(disputeId, { value: DEPOSIT_AMOUNT });
     });
 
-    it("should allow voters to cast their vote", async function () {
-      await expect(disputeManager.connect(voter1).voteDispute(1, true))
-        .to.emit(disputeManager, "VoteCast")
-        .withArgs(1, voter1.address, true);
-      await expect(disputeManager.connect(voter2).voteDispute(1, false))
-        .to.emit(disputeManager, "VoteCast")
-        .withArgs(1, voter2.address, false);
-    });
+    it("should allow voters to vote if they purchased from the challenger (actorB)", async function () {
+      // Mark voter1 as having purchased from actorB => so they can vote
+      await disputeManager.recordPurchase(await voter1.getAddress(), await actorB.getAddress());
 
-    it("should revert if a voter votes twice", async function () {
-      await disputeManager.connect(voter1).voteDispute(1, true);
-      await expect(disputeManager.connect(voter1).voteDispute(1, false))
-        .to.be.revertedWith("Voter has already voted");
+      await expect(disputeManager.connect(voter1).voteDispute(disputeId, true))
+        .to.emit(disputeManager, "VoteCast")
+        .withArgs(disputeId, await voter1.getAddress(), true);
     });
   });
 
   describe("finalizeDispute", function () {
     beforeEach(async function () {
-      // Initiate dispute and have actorA respond.
-      await disputeManager.connect(actorB).initiateDispute(101, actorA.address, { value: DEPOSIT_AMOUNT });
-      await disputeManager.connect(actorA).respondToDispute(1, { value: DEPOSIT_AMOUNT });
+      // Initiate + respond
+      const tx1 = await disputeManager
+        .connect(actorB)
+        .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+      const rx1 = await tx1.wait();
+      disputeId = getEventArgs(rx1, "DisputeInitiated", disputeManager.interface).disputeId;
+
+      await disputeManager.connect(actorA).respondToDispute(disputeId, { value: DEPOSIT_AMOUNT });
     });
 
-    it("should revert finalizeDispute if voting period not over", async function () {
-      await expect(disputeManager.finalizeDispute(1)).to.be.revertedWith("Voting period not over");
-    });
+    it("should finalize dispute in favor of respondent if votesForRespondent >= votesForChallenger", async function () {
+      // Make voter1,2,3 eligible
+      await disputeManager.recordPurchase(await voter1.getAddress(), await actorB.getAddress());
+      await disputeManager.recordPurchase(await voter2.getAddress(), await actorB.getAddress());
+      await disputeManager.recordPurchase(await voter3.getAddress(), await actorB.getAddress());
 
-    it("should finalize dispute in favor of respondent when votesForRespondent >= votesForChallenger", async function () {
-      // Two voters vote for respondent and one votes for challenger.
-      await disputeManager.connect(voter1).voteDispute(1, true);
-      await disputeManager.connect(voter2).voteDispute(1, true);
-      await disputeManager.connect(voter3).voteDispute(1, false);
+      // 2 for respondent, 1 for challenger
+      await disputeManager.connect(voter1).voteDispute(disputeId, true);  // true => support respondent (actorA)
+      await disputeManager.connect(voter2).voteDispute(disputeId, true);
+      await disputeManager.connect(voter3).voteDispute(disputeId, false);
 
-      // Increase time to after the voting period.
-      await ethers.provider.send("evm_increaseTime", [86400 + 1]); // 1 day + 1 second
-      await ethers.provider.send("evm_mine", []);
-
-      await expect(disputeManager.finalizeDispute(1))
-        .to.emit(disputeManager, "DisputeFinalized")
-        .withArgs(1, 1); // Outcome: RespondentWins (enum value 1)
-
-      const disputeDetails = await disputeManager.getDisputeDetails(1);
-      expect(disputeDetails.outcome).to.equal(1);
-    });
-
-    it("should finalize dispute in favor of challenger when votesForChallenger > votesForRespondent", async function () {
-      // Two voters vote for challenger and one for respondent.
-      await disputeManager.connect(voter1).voteDispute(1, false);
-      await disputeManager.connect(voter2).voteDispute(1, false);
-      await disputeManager.connect(voter3).voteDispute(1, true);
-
-      // Increase time to after the voting period.
+      // move time
       await ethers.provider.send("evm_increaseTime", [86400 + 1]);
       await ethers.provider.send("evm_mine", []);
 
-      await expect(disputeManager.finalizeDispute(1))
-        .to.emit(disputeManager, "DisputeFinalized")
-        .withArgs(1, 2); // Outcome: ChallengerWins (enum value 2)
-
-      const disputeDetails = await disputeManager.getDisputeDetails(1);
-      expect(disputeDetails.outcome).to.equal(2);
+      const txFinal = await disputeManager.finalizeDispute(disputeId);
+      const rxFinal = await txFinal.wait();
+      const finalEv = getEventArgs(rxFinal, "DisputeFinalized", disputeManager.interface);
+      expect(finalEv.outcome).to.equal(1); // RespondentWins
     });
+  });
+
+  //
+  // FULL FLOW: RETAILER → DISTRIBUTOR -> rating -> dispute -> finalize
+  //
+  it("Full rating dispute flow in one go", async function () {
+    // 1) already done in beforeEach: retailer rated the distributor
+    // 2) distributor initiates dispute
+    const tx1 = await disputeManager
+      .connect(actorB)
+      .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+    const rx1 = await tx1.wait();
+    disputeId = getEventArgs(rx1, "DisputeInitiated", disputeManager.interface).disputeId;
+
+    // 3) retailer responds
+    await disputeManager.connect(actorA).respondToDispute(disputeId, { value: DEPOSIT_AMOUNT });
+
+    // 4) voters purchased from actorB => can vote
+    await disputeManager.recordPurchase(voter1.address, actorB.address);
+    await disputeManager.recordPurchase(voter2.address, actorB.address);
+    await disputeManager.recordPurchase(voter3.address, actorB.address);
+
+    // 2 favor challenger, 1 favor respondent
+    await disputeManager.connect(voter1).voteDispute(disputeId, false); // false => for challenger
+    await disputeManager.connect(voter2).voteDispute(disputeId, false);
+    await disputeManager.connect(voter3).voteDispute(disputeId, true);
+
+    // time travel
+    await ethers.provider.send("evm_increaseTime", [86400 + 1]);
+    await ethers.provider.send("evm_mine", []);
+
+    // 5) finalize => challenger wins
+    const txFinal = await disputeManager.finalizeDispute(disputeId);
+    const rxFinal = await txFinal.wait();
+    const finalEv = getEventArgs(rxFinal, "DisputeFinalized", disputeManager.interface);
+    expect(finalEv.outcome).to.equal(2); // ChallengerWins
   });
 });

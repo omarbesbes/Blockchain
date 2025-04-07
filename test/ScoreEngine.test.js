@@ -80,11 +80,6 @@ describe("ScoreEngine", function () {
     await registry.connect(retailer).registerStakeholder(Role.Retailer, "retailer metadata");
     await registry.connect(distributor).registerStakeholder(Role.Distributor, "distributor metadata");
 
-    // Deploy a dummy DisputeManager.
-    const DisputeManager = await ethers.getContractFactory("DisputeManager");
-    disputeManager = await DisputeManager.deploy(registry.getAddress());
-    await disputeManager.waitForDeployment();
-
     // Deploy the Token contract.
     const Token = await ethers.getContractFactory("Token");
     token = await Token.deploy();
@@ -92,9 +87,14 @@ describe("ScoreEngine", function () {
 
     // Deploy ScoreEngine using the registry, disputeManager and token addresses.
     const ScoreEngine = await ethers.getContractFactory("ScoreEngine");
-    scoreEngine = await ScoreEngine.deploy(registry.getAddress(), disputeManager.getAddress(), token.getAddress(), productManager.getAddress());
+    scoreEngine = await ScoreEngine.deploy(registry.getAddress(), token.getAddress(), productManager.getAddress());
     await scoreEngine.waitForDeployment();
     await token.transfer(scoreEngine.getAddress(), ethers.parseUnits("1000", 18));
+
+    // Deploy a dummy DisputeManager.
+    const DisputeManager = await ethers.getContractFactory("DisputeManager");
+    disputeManager = await DisputeManager.deploy(registry.getAddress(), scoreEngine.getAddress());
+    await disputeManager.waitForDeployment();
 
   });
 
