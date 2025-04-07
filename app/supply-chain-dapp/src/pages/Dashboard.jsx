@@ -99,9 +99,11 @@ export default function Dashboard() {
         const scoresData = await Promise.all(
           applicableTypes.map(async (scoreId) => {
             const rawScore = await getGlobalScore(address, scoreId);
-            return { name: scoreTypeMapping[scoreId] || `Score ${scoreId}`, value: rawScore };
+            const formattedScore = Number(rawScore) / 1e18; // Divide by 1e18 to get the human-readable score
+            return { name: scoreTypeMapping[scoreId] || `Score ${scoreId}`, value: formattedScore };
           })
         );
+        console.log(scoresData);
         setScores(scoresData);
         setScoresFetched(true);
       } catch (err) {

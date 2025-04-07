@@ -26,11 +26,14 @@ contract TransactionManager {
         uint256 productId;
         uint256 timestamp;
         TransactionStatus status;
-        bool rated;
-        bool ratedFactory;
+        // Mapping to track whether a specific score type has been used for rating seller
+        mapping(uint8 => bool) ratedForSeller;
+        // Mapping to track whether a specific score type has been used for rating factory (if applicable)
+        mapping(uint8 => bool) ratedForFactory;
     }
 
-    mapping(uint256 => Transaction) public transactions;
+    mapping(uint256 => Transaction) private _transactions;
+    mapping(uint256 => bool) private _exists;
 
     event BuyOperationRecorded(
         uint256 indexed transactionId,
@@ -39,7 +42,7 @@ contract TransactionManager {
         uint256 productId
     );
     event TransactionValidated(uint256 indexed transactionId);
-    event SellerRated(uint256 indexed transactionId, address indexed buyer, address indexed seller);
+    event SellerRated(uint256 indexed transactionId, address indexed buyer, address indexed rated);
 
     constructor(
         address _registry,
@@ -55,41 +58,36 @@ contract TransactionManager {
         disputeManager = DisputeManager(_disputeManager);
     }
 
-    // New function: Buyer initiates the transaction
+    // Buyer initiates the transaction
     function recordBuyOperation(address seller, uint256 productId) external returns (uint256) {
         require(registry.isRegistered(msg.sender), "Buyer not registered");
         require(registry.isRegistered(seller), "Seller not registered");
-        // require(!hasPendingTransaction(productId), "Pending transaction exists for this product");
 
         int256 buyerRole = int256(uint256(registry.getRole(msg.sender)));
         int256 sellerRole = int256(uint256(registry.getRole(seller)));
-
-        if (!(buyerRole - sellerRole == 1)) {
-            revert("Invalid buyer-seller role combination for transaction");
-        }
+        require(buyerRole - sellerRole == 1, "Invalid buyer-seller role combination");
 
         transactionCounter++;
-        transactions[transactionCounter] = Transaction({
-            id: transactionCounter,
-            seller: seller,
-            buyer: msg.sender,
-            productId: productId,
-            timestamp: block.timestamp,
-            status: TransactionStatus.Pending,
-            rated: false,
-            ratedFactory: false
-        });
+        uint256 txnId = transactionCounter;
+        Transaction storage txn = _transactions[txnId];
+        txn.id = txnId;
+        txn.seller = seller;
+        txn.buyer = msg.sender;
+        txn.productId = productId;
+        txn.timestamp = block.timestamp;
+        txn.status = TransactionStatus.Pending;
 
-        emit BuyOperationRecorded(transactionCounter, msg.sender, seller, productId);
-        return transactionCounter;
+        _exists[txnId] = true;
+
+        emit BuyOperationRecorded(txnId, msg.sender, seller, productId);
+        return txnId;
     }
 
-
-    // Updated: Seller confirms the transaction
+    // Seller confirms the transaction
     function confirmSellOperation(uint256 transactionId) external {
-        Transaction storage txn = transactions[transactionId];
+        require(_exists[transactionId], "Transaction does not exist");
 
-        require(txn.id != 0, "Transaction does not exist");
+        Transaction storage txn = _transactions[transactionId];
         require(txn.status == TransactionStatus.Pending, "Transaction already validated");
         require(txn.seller == msg.sender, "Only designated seller can confirm sale");
 
@@ -98,32 +96,31 @@ contract TransactionManager {
         uint256 sellerRole = uint256(registry.getRole(txn.seller));
         uint256 buyerRole = uint256(registry.getRole(txn.buyer));
 
-        // For Distributor -> Factory: factory (seller) deposits tokens to distributor (buyer)
-        // or For Retailer -> Distributor: distributor (seller) deposits tokens to retailer (buyer)
+        // For Distributor -> Factory or Retailer -> Distributor scenarios:
         if ((sellerRole == 2 && buyerRole == 3) || (sellerRole == 3 && buyerRole == 4)) {
             require(token.allowance(txn.seller, address(this)) >= REWARD_AMOUNT, "Insufficient allowance for seller deposit");
             bool success = token.transferFrom(txn.seller, txn.buyer, REWARD_AMOUNT);
             require(success, "Token transfer for reward deposit failed");
         }
-        // For Consumer -> Retailer: retailer (seller) deposits tokens to ScoreEngine
+        // For Consumer -> Retailer:
         else if (sellerRole == 4 && buyerRole == 5) {
             require(token.allowance(txn.seller, address(this)) >= REWARD_AMOUNT, "Insufficient allowance for seller deposit");
             bool success = token.transferFrom(txn.seller, address(scoreEngine), REWARD_AMOUNT);
             require(success, "Token transfer for reward deposit failed");
         }
-        // For Factory -> Supplier (or other combinations), no deposit is required.
+        // For other combinations, no deposit is required.
         
-        // If it's a factory product sale, transfer the product ownership
-        // if (sellerRole >= 2 && txn.productId > 0) {
+        // Transfer product ownership from seller to buyer if productId is set.
         if (txn.productId > 0) {
             productManager.transferProduct(txn.buyer, txn.productId);
         }
+        
         disputeManager.recordPurchase(txn.buyer, txn.seller);
         emit TransactionValidated(transactionId);
     }
 
-
-    // buyerRateSeller remains unchanged.
+    // Buyer rates the seller (or factory) for a given score type.
+    // Checks that the rating for the provided scoreType has not already been recorded.
     function buyerRateSeller(
         uint256 transactionId,
         uint8 scoreType,
@@ -131,27 +128,25 @@ contract TransactionManager {
         uint256 productIdForRating,
         bool ratingFactory
     ) external {
-        Transaction storage txn = transactions[transactionId];
+        require(_exists[transactionId], "Transaction does not exist");
 
-        require(txn.id != 0, "Transaction does not exist");
+        Transaction storage txn = _transactions[transactionId];
         require(txn.status == TransactionStatus.Validated, "Transaction not validated");
-        require(txn.buyer == msg.sender, "Only buyer can rate the seller");
-        ProductManager.Product memory product;
+        require(txn.buyer == msg.sender, "Only buyer can rate");
+
         address toBeRated = txn.seller;
-        address rater = msg.sender;
         if (ratingFactory) {
-            require(!txn.ratedFactory, "Seller already rated for this transaction");
-            product = productManager.getProductDetails(productIdForRating);
+            require(!txn.ratedForFactory[scoreType], "Already rated factory for this score type");
+            ProductManager.Product memory product = productManager.getProductDetails(productIdForRating);
             toBeRated = product.creator;
         } else {
-            require(!txn.rated, "Seller already rated for this transaction");
+            require(!txn.ratedForSeller[scoreType], "Already rated seller for this score type");
         }
 
         uint256 sellerRole = uint256(registry.getRole(toBeRated));
-        uint256 buyerRole = uint256(registry.getRole(rater));
+        uint256 buyerRole = uint256(registry.getRole(msg.sender));
 
         bool allowed = false;
-
         if (buyerRole == 2 && sellerRole == 1) {
             allowed = true;
         } else if (buyerRole == 4 && sellerRole == 3) {
@@ -159,80 +154,101 @@ contract TransactionManager {
         } else if (buyerRole == 5 && sellerRole == 4) {
             allowed = true;
         } else if (buyerRole == 5 && sellerRole == 2) {
+            ProductManager.Product memory product = productManager.getProductDetails(productIdForRating);
             require(product.currentOwner == msg.sender, "Caller is not the owner of the product");
             allowed = true;
         }
-
         require(allowed, "Rating not allowed for this transaction based on roles");
 
         scoreEngine.rateStakeholder(toBeRated, ScoreEngine.ScoreType(scoreType), scoreValue);
-        txn.rated = true;
 
-        emit SellerRated(transactionId, rater, toBeRated);
-    }
-    //// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\contracts\TransactionManager.sol
-// Add this function to your TransactionManager contract
+        if (ratingFactory) {
+            txn.ratedForFactory[scoreType] = true;
+        } else {
+            txn.ratedForSeller[scoreType] = true;
+        }
 
-/**
- * @notice Returns the ID of any pending transaction for a given product
- * @param productId The ID of the product to check
- * @return transactionId The ID of the pending transaction, or 0 if none exists
- */
-function getPendingTransactionByProduct(uint256 productId) external view returns (uint256) {
-    // Start from the latest transaction and work backwards
-    // This is more gas efficient than checking from the beginning when most
-    // recent transactions are more likely to be pending
-    for (uint256 i = transactionCounter; i > 0; i--) {
-        Transaction storage txn = transactions[i];
-        if (txn.productId == productId && txn.status == TransactionStatus.Pending) {
-            return txn.id;
-        }
+        emit SellerRated(transactionId, msg.sender, toBeRated);
     }
-    
-    // Return 0 if no pending transaction was found for this product
-    return 0;
-}
 
-/**
- * @notice Returns all pending transaction IDs for a given product
- * @param productId The ID of the product to check
- * @return An array of transaction IDs that are pending for this product
- */
-function getAllPendingTransactionsByProduct(uint256 productId) external view returns (uint256[] memory) {
-    // First, count how many pending transactions exist for this product
-    uint256 count = 0;
-    for (uint256 i = 1; i <= transactionCounter; i++) {
-        if (transactions[i].productId == productId && transactions[i].status == TransactionStatus.Pending) {
-            count++;
+    // Returns the pending transaction ID for a given product (or 0 if none)
+    function getPendingTransactionByProduct(uint256 productId) external view returns (uint256) {
+        for (uint256 i = transactionCounter; i > 0; i--) {
+            Transaction storage txn = _transactions[i];
+            if (txn.productId == productId && txn.status == TransactionStatus.Pending) {
+                return txn.id;
+            }
         }
+        return 0;
     }
-    
-    // Then create an array of the correct size and populate it
-    uint256[] memory results = new uint256[](count);
-    uint256 index = 0;
-    
-    for (uint256 i = 1; i <= transactionCounter; i++) {
-        if (transactions[i].productId == productId && transactions[i].status == TransactionStatus.Pending) {
-            results[index] = i;
-            index++;
-        }
-    }
-    
-    return results;
-}
 
-/**
- * @notice Returns whether a pending transaction exists for a given product
- * @param productId The ID of the product to check
- * @return True if a pending transaction exists, false otherwise
- */
-function hasPendingTransaction(uint256 productId) public view returns (bool) {
-    for (uint256 i = transactionCounter; i > 0; i--) {
-        Transaction storage txn = transactions[i];
-        if (txn.productId == productId && txn.status == TransactionStatus.Pending) {
-            return true;
+    // Returns all pending transaction IDs for a given product
+    function getAllPendingTransactionsByProduct(uint256 productId) external view returns (uint256[] memory) {
+        uint256 count = 0;
+        for (uint256 i = 1; i <= transactionCounter; i++) {
+            if (_transactions[i].productId == productId && _transactions[i].status == TransactionStatus.Pending) {
+                count++;
+            }
         }
+        uint256[] memory results = new uint256[](count);
+        uint256 index = 0;
+        for (uint256 i = 1; i <= transactionCounter; i++) {
+            if (_transactions[i].productId == productId && _transactions[i].status == TransactionStatus.Pending) {
+                results[index] = i;
+                index++;
+            }
+        }
+        return results;
     }
-    return false;
+
+    // Returns true if a pending transaction exists for a given product
+    function hasPendingTransaction(uint256 productId) public view returns (bool) {
+        for (uint256 i = transactionCounter; i > 0; i--) {
+            if (_transactions[i].productId == productId && _transactions[i].status == TransactionStatus.Pending) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Returns the last transaction ID for a given product
+    function getLastTransactionId(uint256 productId) external view returns (uint256) {
+        for (uint256 i = transactionCounter; i > 0; i--) {
+            if (_transactions[i].productId == productId) {
+                return _transactions[i].id;
+            }
+        }
+        return 0;
+    }
+
+    // Getter to retrieve transaction details.
+    // Returns: id, seller, buyer, productId, timestamp, and status.
+    function getTransaction(uint256 id) external view returns (
+        uint256, address, address, uint256, uint256, TransactionStatus
+    ) {
+        Transaction storage txn = _transactions[id];
+        return (
+            txn.id,
+            txn.seller,
+            txn.buyer,
+            txn.productId,
+            txn.timestamp,
+            txn.status
+        );
+    }
+
+    // New view function: Check if the seller has been rated for a given score type.
+    function isSellerRated(uint256 transactionId, uint8 scoreType) external view returns (bool) {
+        require(_exists[transactionId], "Transaction does not exist");
+        Transaction storage txn = _transactions[transactionId];
+        return txn.ratedForSeller[scoreType];
+    }
+
+    // New view function: Check if the factory has been rated for a given score type.
+    function isFactoryRated(uint256 transactionId, uint8 scoreType) external view returns (bool) {
+        require(_exists[transactionId], "Transaction does not exist");
+        Transaction storage txn = _transactions[transactionId];
+        return txn.ratedForFactory[scoreType];
+    }
 }
-}
+    

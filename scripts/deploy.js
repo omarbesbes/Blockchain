@@ -28,14 +28,7 @@ async function main() {
   const productManagerAddress = await productManager.getAddress();
   console.log(`✅ ProductManager deployed at: ${productManagerAddress}`);
 
-  // 3. Deploy DisputeManager
-  console.log("Deploying DisputeManager...");
-  DisputeManager = await ethers.getContractFactory("DisputeManager");
-  disputeManager = await DisputeManager.deploy(registryAddress);
-  await disputeManager.waitForDeployment();
-  const disputeManagerAddress = await disputeManager.getAddress();
-  console.log(`✅ DisputeManager deployed at: ${disputeManagerAddress}`);
-
+  
   // 4. Deploy Token
   console.log("Deploying Token...");
   Token = await ethers.getContractFactory("Token");
@@ -49,13 +42,20 @@ async function main() {
   ScoreEngine = await ethers.getContractFactory("ScoreEngine");
   scoreEngine = await ScoreEngine.deploy(
     registryAddress,
-    disputeManagerAddress,
     tokenAddress,
     productManagerAddress
   );
   await scoreEngine.waitForDeployment();
   const scoreEngineAddress = await scoreEngine.getAddress();
   console.log(`✅ ScoreEngine deployed at: ${scoreEngineAddress}`);
+
+  // 3. Deploy DisputeManager
+  console.log("Deploying DisputeManager...");
+  DisputeManager = await ethers.getContractFactory("DisputeManager");
+  disputeManager = await DisputeManager.deploy(registryAddress,scoreEngineAddress);
+  await disputeManager.waitForDeployment();
+  const disputeManagerAddress = await disputeManager.getAddress();
+  console.log(`✅ DisputeManager deployed at: ${disputeManagerAddress}`);
 
   // 6. Deploy TransactionManager
   console.log("Deploying TransactionManager...");
@@ -64,7 +64,8 @@ async function main() {
     registryAddress,
     productManagerAddress,
     scoreEngineAddress,
-    tokenAddress
+    tokenAddress,
+    disputeManagerAddress
   );
   await transactionManager.waitForDeployment();
   const transactionManagerAddress = await transactionManager.getAddress();

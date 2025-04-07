@@ -25,6 +25,7 @@ export default function StakeholderList() {
   const [pendingProducts, setPendingProducts] = useState({});
   const [isCheckingPending, setIsCheckingPending] = useState(false);
 
+  // Updated scoreTypeMapping includes a key for 12
   const scoreTypeMapping = {
     0: 'Trust',
     1: 'Delivery speed',
@@ -38,6 +39,7 @@ export default function StakeholderList() {
     9: 'Delivery',
     10: 'Price fairness',
     11: 'Return policy',
+    12: 'Customer service'
   };
   
   // Role labels
@@ -96,6 +98,22 @@ export default function StakeholderList() {
         return;
       }
 
+      // Determine score types based on allowedRole:
+      // For Supplier (role 1): score types [0, 1, 2]
+      // For Factory (role 2): score types [4, 5, 6]
+      // For Distributor (role 3): score types [7, 8, 9]
+      // For Retailer (role 4): score types [10, 11, 12]
+      let scoreTypes = [];
+      if (allowedRole === 1) {
+        scoreTypes = [0, 1, 2];
+      } else if (allowedRole === 2) {
+        scoreTypes = [4, 5, 3];
+      } else if (allowedRole === 3) {
+        scoreTypes = [7, 8, 6];
+      } else if (allowedRole === 4) {
+        scoreTypes = [10, 11, 9];
+      }
+
       let allAddrs = [];
       try {
         allAddrs = await getAllStakeholders();
@@ -109,25 +127,28 @@ export default function StakeholderList() {
         try {
           const rNum = await getStakeholderType(sAddr);
           if (Number(rNum) === allowedRole) {
-            // Fetch 3 example scores
-            const trustRaw = await getGlobalScore(sAddr, 0); // TRUST
-            const productQualityRaw = await getGlobalScore(sAddr, 3); // PRODUCT_QUALITY
-            const deliveryRaw = await getGlobalScore(sAddr, 9); // DELIVERY
+            // Fetch scores based on the scoreTypes for this role
+            const score1Raw = await getGlobalScore(sAddr, scoreTypes[0]);
+            const score2Raw = await getGlobalScore(sAddr, scoreTypes[1]);
+            const score3Raw = await getGlobalScore(sAddr, scoreTypes[2]);
 
             const allScores = await getScores(sAddr);
             const ratingCount = allScores.length;
 
-            // Convert values
-            const trustScore = Number(trustRaw) / 1e18;
-            const productQualityScore = Number(productQualityRaw) / 1e18;
-            const deliveryScore = Number(deliveryRaw) / 1e18;
+            // Convert values (assumes scores are scaled by 1e18)
+            const score1 = Number(score1Raw) / 1e18;
+            const score2 = Number(score2Raw) / 1e18;
+            const score3 = Number(score3Raw) / 1e18;
 
             finalList.push({
               address: sAddr,
               role: Number(rNum),
-              trustScore: trustScore.toFixed(2),
-              productQualityScore: productQualityScore.toFixed(2),
-              deliveryScore: deliveryScore.toFixed(2),
+              score1: score1.toFixed(2),
+              score2: score2.toFixed(2),
+              score3: score3.toFixed(2),
+              score1Type: scoreTypes[0],
+              score2Type: scoreTypes[1],
+              score3Type: scoreTypes[2],
               ratingCount,
             });
           }
@@ -187,7 +208,7 @@ export default function StakeholderList() {
       console.log("Selected stakeholder:", selectedStakeholder);
       console.log("Wallet connected:", isConnected);
       // For demonstration, using fixed parameters
-      await recordBuyOperation(selectedStakeholder,productId );
+      await recordBuyOperation(selectedStakeholder, productId);
       
       console.log("Purchase recorded successfully");
       
@@ -235,9 +256,9 @@ export default function StakeholderList() {
                 <p className="card-label">Address:</p>
                 <p className="card-value">{st.address}</p>
                 <div className="scores-container">
-                  <p>Trust: <strong>{st.trustScore}</strong></p>
-                  <p>Product Quality: <strong>{st.productQualityScore}</strong></p>
-                  <p>Delivery: <strong>{st.deliveryScore}</strong></p>
+                  <p>{scoreTypeMapping[st.score1Type]}: <strong>{st.score1}</strong></p>
+                  <p>{scoreTypeMapping[st.score2Type]}: <strong>{st.score2}</strong></p>
+                  <p>{scoreTypeMapping[st.score3Type]}: <strong>{st.score3}</strong></p>
                 </div>
                 <div className="rating-count">
                   <small>({st.ratingCount} total ratings)</small>

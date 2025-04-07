@@ -55,6 +55,7 @@ export function useTransactionManager() {
       abi: TransactionManagerABI,
       functionName: "buyerRateSeller",
       args: [transactionId, scoreType, scoreValue, productIdForRating, ratingFactory],
+      account: walletClient.account,
     });
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
     return receipt;
@@ -90,13 +91,43 @@ export function useTransactionManager() {
     });
   }
 
-  // 7. Get a transaction's details using the public mapping getter (read-only)
+  // 7. Get a transaction's details using the getTransaction function (read-only)
   async function getTransaction(txId) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
       abi: TransactionManagerABI,
-      functionName: "transactions",
+      functionName: "getTransaction",
       args: [txId],
+    });
+  }
+
+  // 8. Get the last transaction ID for a given product (read-only)
+  async function getLastTransactionId(productId) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "getLastTransactionId",
+      args: [productId],
+    });
+  }
+
+  // 9. Check if the seller has been rated for a given score type (read-only)
+  async function isSellerRated(transactionId, scoreType) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "isSellerRated",
+      args: [transactionId, scoreType],
+    });
+  }
+
+  // 10. Check if the factory has been rated for a given score type (read-only)
+  async function isFactoryRated(transactionId, scoreType) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "isFactoryRated",
+      args: [transactionId, scoreType],
     });
   }
 
@@ -108,5 +139,8 @@ export function useTransactionManager() {
     getAllPendingTransactionsByProduct,
     hasPendingTransaction,
     getTransaction,
+    getLastTransactionId,
+    isSellerRated,
+    isFactoryRated,
   };
 }
