@@ -139,18 +139,48 @@ export default function StakeholderList() {
     setSelectedStakeholder(stakeholderAddress);
     // Also set for the hook
     setSelectedAddress(stakeholderAddress);
+    // Reset pending products when selecting a new stakeholder
+    setPendingProducts({});
   }
-  function handleBuyProduct(productId) {
-    // Call the buyProduct function to transfer ownership from the seller to the buyer
-    buyProduct(productId)
-      .then((receipt) => {
-        alert(`Product #${productId} purchased successfully!`);
-        // Optionally refresh product list or update UI after purchase
-      })
-      .catch((err) => {
-        console.error('Failed to purchase product:', err);
-        alert('Failed to purchase product.');
-      });
+  
+  // ====== 5) Handle buy product ======
+  //// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\StakeholderList.jsx
+async function handleBuyProduct(productId) {
+  try {
+    // Add confirmation step to ensure user is aware
+    if (!window.confirm(`Are you sure you want to purchase Product #${productId}?`)) {
+      return;
+    }
+    
+    console.log("Starting purchase for product:", productId);
+    console.log("Selected stakeholder:", selectedStakeholder);
+    await ethereum.request({
+      method: 'eth_requestAccounts',
+    });
+    // First record the buy operation in TransactionManager
+    await recordBuyOperation(selectedStakeholder, productId);
+    
+    // If we get here, the transaction was successful
+    console.log("Purchase recorded successfully");
+    
+    // Update the pending status for this product immediately
+    setPendingProducts(prev => ({
+      ...prev,
+      [productId]: true
+    }));
+    
+    alert(`Purchase request for Product #${productId} has been recorded. Waiting for seller confirmation.`);
+  } catch (err) {
+    console.error('Failed to record buy operation:', err);
+    
+    // Provide a cleaner error message to the user
+    const errorMessage = err.message || 'Unknown error';
+    const userMessage = errorMessage.includes('wallet') || errorMessage.includes('network') 
+      ? errorMessage 
+      : 'Failed to process your purchase. Please try again.';
+      
+    alert(userMessage);
+  }
   }
 
   // =======================
