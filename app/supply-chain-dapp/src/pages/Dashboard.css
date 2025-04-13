@@ -193,3 +193,100 @@ body, html {
     margin-top: 10px;
   }
 }
+.highlight-rating {
+  background-color: #f8f9ff;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #e1e4e8;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.rating-type-container, .rating-score-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.rating-type-label, .rating-score-label {
+  font-weight: 500;
+  color: #4a5568;
+}
+
+.rating-type-value {
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 1.1rem;
+}
+
+.rating-score-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 6px;
+  text-align: center;
+  min-width: 70px;
+}
+
+/* Score value colors */
+.rating-score-value.score-0 {
+  background-color: #fed7d7;
+  color: #c53030;
+}
+
+.rating-score-value.score-1 {
+  background-color: #fed7d7;
+  color: #c53030;
+}
+
+.rating-score-value.score-2 {
+  background-color: #feebc8;
+  color: #c05621;
+}
+
+.rating-score-value.score-3 {
+  background-color: #fefcbf;
+  color: #b7791f;
+}
+
+.rating-score-value.score-4 {
+  background-color: #c6f6d5;
+  color: #2f855a;
+}
+
+.rating-score-value.score-5 {
+  background-color: #9ae6b4;
+  color: #276749;
+}
+
+/* Improve dispute button */
+.action-button.dispute-button {
+  background-color: #e53e3e;
+  color: white;
+  font-weight: 600;
+}
+
+.action-button.dispute-button:hover:not(:disabled) {
+  background-color: #c53030;
+}
+
+/* Add some spacing between items */
+.rating-item {
+  margin-bottom: 24px;
+}
+
+/* Enhanced styling for rating details section */
+.rating-details-section {
+  margin: 16px 0;
+}
+
+.rating-details-title {
+  margin-bottom: 12px;
+  font-size: 1.1rem;
+  color: #4a5568;
+}
+
+/* Make the dispute button more specific to the score type */
+.dispute-button {
+  text-transform: none;
+}

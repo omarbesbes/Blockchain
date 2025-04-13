@@ -1,3 +1,4 @@
+//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\contracts\DisputeManager.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -35,7 +36,8 @@ contract DisputeManager is Ownable {
     
     struct Dispute {
         uint disputeId;
-        uint ratingId;         // External identifier for the rating (optional)
+        uint ratingId;         // External identifier for the rating (transaction ID)
+        uint scoreType;        // The specific score type being disputed (0-11)
         address challenger;    // Actor B who initiates the dispute
         address respondent;    // Actor A who is being challenged
         uint depositChallenger;
@@ -56,11 +58,13 @@ contract DisputeManager is Ownable {
     mapping(address => uint) public disputesRaisedCount;
     mapping(address => uint) public disputesWonCount;
 
+    // Track disputes by rating ID and score type
+    mapping(uint => mapping(uint => uint)) public disputeByRatingAndScoreType;
 
     // hasPurchasedFrom[voter][seller] is true if the voter has bought from that seller.
     mapping(address => mapping(address => bool)) public hasPurchasedFrom;
     
-    event DisputeInitiated(uint disputeId, uint ratingId, address indexed challenger, address indexed respondent);
+    event DisputeInitiated(uint disputeId, uint ratingId, uint scoreType, address indexed challenger, address indexed respondent);
     event RespondedToDispute(uint disputeId, address indexed respondent);
     event VoteCast(uint disputeId, address indexed voter, bool supportRespondent);
     event DisputeFinalized(uint disputeId, DisputeOutcome outcome);
@@ -79,20 +83,27 @@ contract DisputeManager is Ownable {
     }  
 
     /**
-     * @notice Initiates a dispute.
+     * @notice Initiates a dispute for a specific score type.
      * @param _ratingId An identifier for the rating under dispute.
+     * @param _scoreType The specific score type being disputed (0-11).
      * @param _respondent The address of the party being challenged.
      * @return disputeId The unique dispute identifier.
      *
      * Requirements:
      * - The challenger must send exactly DEPOSIT_AMOUNT.
      * - The respondent's role must NOT be Consumer.
+     * - No active dispute can exist for this rating ID and score type.
+     * - The challenger must be the rated stakeholder in the referenced score.
      */
-    function initiateDispute(uint _ratingId, address _respondent) external payable returns (uint) {
+    function initiateDispute(uint _ratingId, uint _scoreType, address _respondent) external payable returns (uint) {
         require(msg.value == DEPOSIT_AMOUNT, "Challenger deposit must be equal to DEPOSIT_AMOUNT");
         require(_respondent != address(0), "Invalid respondent address");
+        require(_scoreType <= 11, "Invalid score type");
         // Check via StakeholderRegistry: challenges not allowed if the respondent is a Consumer.
         require(registry.getRole(_respondent) != StakeholderRegistry.Role.Consumer, "Challenging not allowed if rater is a consumer");
+
+        // Check if a dispute already exists for this rating and score type
+        require(disputeByRatingAndScoreType[_ratingId][_scoreType] == 0, "A dispute already exists for this rating and score type");
 
         ScoreEngine.ScoreRecord memory scoreRec = scoreEngine.getScoreById(_ratingId);
 
@@ -104,6 +115,7 @@ contract DisputeManager is Ownable {
         Dispute storage disp = disputes[disputeId];
         disp.disputeId = disputeId;
         disp.ratingId = _ratingId;
+        disp.scoreType = _scoreType;
         disp.challenger = msg.sender;
         disp.respondent = _respondent;
         disp.depositChallenger = msg.value;
@@ -113,8 +125,11 @@ contract DisputeManager is Ownable {
         disp.finalized = false;
         disp.exists = true;
 
+        // Register this dispute for the rating ID and score type
+        disputeByRatingAndScoreType[_ratingId][_scoreType] = disputeId;
+
         disputesRaisedCount[msg.sender]++;
-        emit DisputeInitiated(disputeId, _ratingId, msg.sender, _respondent);
+        emit DisputeInitiated(disputeId, _ratingId, _scoreType, msg.sender, _respondent);
         return disputeId;
     }
     
@@ -154,7 +169,10 @@ contract DisputeManager is Ownable {
         require(!hasVoted[_disputeId][msg.sender], "Voter has already voted");
 
         require(hasPurchasedFrom[msg.sender][disputes[_disputeId].challenger], "Not eligible to vote: must have purchased from the challenger");
-
+        
+        // Ensure that the voter is not a party to the dispute
+        require(msg.sender != disputes[_disputeId].challenger && msg.sender != disputes[_disputeId].respondent, 
+                "Parties to a dispute cannot vote on it");
 
         hasVoted[_disputeId][msg.sender] = true;
         disputeVoteChoice[_disputeId][msg.sender] = supportRespondent;
@@ -258,7 +276,8 @@ contract DisputeManager is Ownable {
         uint votesForRespondent,
         uint votesForChallenger,
         address[] memory voters,
-        bool finalized
+        bool finalized,
+        uint scoreType
     ) {
         require(disputes[_disputeId].exists, "Dispute does not exist");
         Dispute storage disp = disputes[_disputeId];
@@ -275,7 +294,8 @@ contract DisputeManager is Ownable {
             disp.votesForRespondent,
             disp.votesForChallenger,
             disp.voters,
-            disp.finalized
+            disp.finalized,
+            disp.scoreType
         );
     }
 
@@ -289,7 +309,9 @@ contract DisputeManager is Ownable {
                 !dispute.finalized && 
                 block.timestamp < dispute.votingDeadline &&
                 hasPurchasedFrom[voter][dispute.challenger] &&
-                !hasVoted[i][voter]
+                !hasVoted[i][voter] &&
+                voter != dispute.challenger &&
+                voter != dispute.respondent
             ) {
                 eligibleCount++;
             }
@@ -306,7 +328,9 @@ contract DisputeManager is Ownable {
                 !dispute.finalized && 
                 block.timestamp < dispute.votingDeadline &&
                 hasPurchasedFrom[voter][dispute.challenger] &&
-                !hasVoted[i][voter]
+                !hasVoted[i][voter] &&
+                voter != dispute.challenger &&
+                voter != dispute.respondent
             ) {
                 eligibleDisputes[index] = i;
                 index++;
@@ -315,6 +339,78 @@ contract DisputeManager is Ownable {
         
         return eligibleDisputes;
     }
-    
+
+    /**
+     * @notice Returns all dispute IDs initiated by a given user (challenger)
+     * @param challenger The address of the user who initiated the disputes
+     * @return An array of dispute IDs where the specified user is the challenger
+     */
+    function getUserDisputes(address challenger) external view returns (uint[] memory) {
+        uint disputeCount = 0;
+        
+        // First pass: count disputes initiated by this challenger
+        for (uint i = 1; i <= disputeCounter; i++) {
+            if (disputes[i].exists && disputes[i].challenger == challenger) {
+                disputeCount++;
+            }
+        }
+        
+        // Allocate array with the appropriate size
+        uint[] memory userDisputes = new uint[](disputeCount);
+        uint index = 0;
+        
+        // Second pass: populate the array with dispute IDs
+        for (uint i = 1; i <= disputeCounter; i++) {
+            if (disputes[i].exists && disputes[i].challenger == challenger) {
+                userDisputes[index] = i;
+                index++;
+            }
+        }
+        
+        return userDisputes;
+    }
+
+    /**
+     * @notice Returns all dispute IDs raised against a given user (respondent)
+     * @param respondent The address of the user who needs to respond to disputes
+     * @return An array of dispute IDs where the specified user is the respondent
+     */
+    function getRespondentDisputes(address respondent) external view returns (uint[] memory) {
+        uint disputeCount = 0;
+        
+        // First pass: count disputes where this user is the respondent
+        for (uint i = 1; i <= disputeCounter; i++) {
+            if (disputes[i].exists && 
+                disputes[i].respondent == respondent && 
+                !disputes[i].finalized && 
+                !disputes[i].depositsComplete) {
+                disputeCount++;
+            }
+        }
+        
+        // Allocate array with the appropriate size
+        uint[] memory respondentDisputes = new uint[](disputeCount);
+        uint index = 0;
+        
+        // Second pass: populate the array with dispute IDs
+        for (uint i = 1; i <= disputeCounter; i++) {
+            if (disputes[i].exists && 
+                disputes[i].respondent == respondent && 
+                !disputes[i].finalized && 
+                !disputes[i].depositsComplete) {
+                respondentDisputes[index] = i;
+                index++;
+            }
+        }
+        
+        return respondentDisputes;
+    }
+
+    // Check if a dispute exists for a specific rating and score type
+    function hasActiveDispute(uint _ratingId, uint _scoreType) external view returns (bool) {
+        uint disputeId = disputeByRatingAndScoreType[_ratingId][_scoreType];
+        return disputeId != 0 && !disputes[disputeId].finalized;
+    }
+
     receive() external payable {}
 }

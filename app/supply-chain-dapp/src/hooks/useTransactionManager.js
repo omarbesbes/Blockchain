@@ -142,20 +142,80 @@ export function useTransactionManager() {
     });
   }
 
-  // NEW 12. Update the rating status (accepted or disputed) for a given transaction.
-  async function updateRatingStatus(transactionId, accepted) {
+  async function updateRatingStatus(transactionId, scoreType, accepted) {
     if (!walletClient) throw new Error("No wallet connected");
-
+  
     const txHash = await walletClient.writeContract({
       address: TransactionManagerAddress,
       abi: TransactionManagerABI,
       functionName: "updateRatingStatus",
-      args: [transactionId, accepted],
+      args: [transactionId, scoreType, accepted],
       account: walletClient.account,
     });
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
     return receipt;
   }
+  
+  // Add the new isScoreTypeProcessed function:
+  async function isScoreTypeProcessed(transactionId, scoreType) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "isScoreTypeProcessed",
+      args: [transactionId, scoreType],
+    });
+  }
+
+  // NEW 13. Get all buyers for a given seller (read-only)
+  async function getBuyersForSeller(seller) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "getBuyersForSeller",
+      args: [seller],
+    });
+  }
+
+  // NEW 14. Check if a buyer has purchased from a seller (read-only)
+  async function hasBoughtFromSeller(seller, buyer) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "hasBoughtFromSeller",
+      args: [seller, buyer],
+    });
+  }
+
+  // NEW 15. Get the number of buyers for a seller (read-only)
+  async function getSellerBuyerCount(seller) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "getSellerBuyerCount",
+      args: [seller],
+    });
+  }
+
+  // NEW 16. Get a buyer at a specific index for a seller (read-only)
+  async function getSellerBuyerAtIndex(seller, index) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "getSellerBuyerAtIndex",
+      args: [seller, index],
+    });
+
+
+    
+  }
+  
+  async function getTransactionScore(transactionId, scoreType, isFactory = false) {
+    return await publicClient.readContract({
+      address: TransactionManagerAddress,
+      abi: TransactionManagerABI,
+      functionName: "getTransactionScore",
+      args: [transactionId, scoreType, isFactory],
+    });}
 
   return {
     recordBuyOperation,
@@ -168,7 +228,15 @@ export function useTransactionManager() {
     getLastTransactionId,
     isSellerRated,
     isFactoryRated,
-    getPendingRatedTransactions, // NEW
-    updateRatingStatus,         // NEW
+    getPendingRatedTransactions,
+    updateRatingStatus,
+    // NEW buyer-seller relationship functions
+    getBuyersForSeller,
+    hasBoughtFromSeller,
+    getSellerBuyerCount,
+    getSellerBuyerAtIndex,
+    getTransactionScore,
+    isScoreTypeProcessed,
+
   };
 }

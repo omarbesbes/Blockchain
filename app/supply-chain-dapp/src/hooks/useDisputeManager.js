@@ -1,3 +1,4 @@
+//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\hooks\useDisputeManager.js
 // src/hooks/useDisputeManager.js
 import { getContract } from "viem";
 import { useWalletClient, usePublicClient } from "wagmi";
@@ -10,13 +11,13 @@ export function useDisputeManager() {
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
 
-  async function initiateDispute(ratingId, respondent, depositAmount) {
+  async function initiateDispute(ratingId, scoreType, respondent, depositAmount) {
     if (!walletClient) throw new Error("No wallet connected");
     const txHash = await walletClient.writeContract({
       address: disputeManagerAddress,
       abi: disputeManagerABI,
       functionName: "initiateDispute",
-      args: [ratingId, respondent],
+      args: [ratingId, scoreType, respondent],
       value: depositAmount,
       account: walletClient.account,
     });
@@ -81,12 +82,62 @@ export function useDisputeManager() {
     return publicClient.waitForTransactionReceipt({ hash: txHash });
   }
 
+  // Get eligible disputes for voting
+  async function getEligibleDisputes(voterAddress) {
+    if (!voterAddress) throw new Error("Voter address is required");
+    
+    return publicClient.readContract({
+      address: disputeManagerAddress,
+      abi: disputeManagerABI,
+      functionName: "getEligibleDisputes",
+      args: [voterAddress],
+    });
+  }
+
+  // Get disputes where the user is the respondent (needs to respond)
+  async function getRespondentDisputes(respondentAddress) {
+    if (!respondentAddress) throw new Error("Respondent address is required");
+    
+    return publicClient.readContract({
+      address: disputeManagerAddress,
+      abi: disputeManagerABI,
+      functionName: "getRespondentDisputes",
+      args: [respondentAddress],
+    });
+  }
+
+  // Get disputes initiated by a user
+  async function getUserDisputes(challengerAddress) {
+    if (!challengerAddress) throw new Error("Challenger address is required");
+    
+    return publicClient.readContract({
+      address: disputeManagerAddress,
+      abi: disputeManagerABI,
+      functionName: "getUserDisputes",
+      args: [challengerAddress],
+    });
+  }
+
+  // Check if there's an active dispute for a rating and score type
+  async function hasActiveDispute(ratingId, scoreType) {
+    return publicClient.readContract({
+      address: disputeManagerAddress,
+      abi: disputeManagerABI,
+      functionName: "hasActiveDispute",
+      args: [ratingId, scoreType],
+    });
+  }
+
   return {
     initiateDispute,
     respondToDispute,
     voteDispute,
     finalizeDispute,
     getDisputeDetails,
-    recordPurchase
+    recordPurchase,
+    getEligibleDisputes,
+    getUserDisputes,
+    getRespondentDisputes,
+    hasActiveDispute
   };
 }
