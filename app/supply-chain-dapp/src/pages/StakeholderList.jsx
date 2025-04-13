@@ -2,16 +2,15 @@
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useStakeholderRegistry } from '../hooks/useStakeholderRegistry';
-import { useProductManager, useGetProductsByOwner } from '../hooks/useProductManager';
+import { useGetProductsByOwner } from '../hooks/useProductManager';
 import { useScoreEngine } from '../hooks/useScoreEngine';
-import { useWalletClient, usePublicClient } from "wagmi";
 import { useTransactionManager } from '../hooks/useTransactionManager';
 import './StakeholderList.css';
 
 export default function StakeholderList() {
   const { address, isConnected } = useAccount();
   const { getAllStakeholders, getStakeholderType } = useStakeholderRegistry();
-  const { getGlobalScore, getScores } = useScoreEngine();
+  const { getGlobalScore, getScores, getConfidenceScore } = useScoreEngine(); // Include getConfidenceScore
   const { recordBuyOperation, hasPendingTransaction } = useTransactionManager();
   
   const [myRole, setMyRole] = useState(null);
@@ -122,42 +121,48 @@ export default function StakeholderList() {
         return;
       }
 
-      const finalList = [];
-      for (const sAddr of allAddrs) {
-        try {
-          const rNum = await getStakeholderType(sAddr);
-          if (Number(rNum) === allowedRole) {
-            // Fetch scores based on the scoreTypes for this role
-            const score1Raw = await getGlobalScore(sAddr, scoreTypes[0]);
-            const score2Raw = await getGlobalScore(sAddr, scoreTypes[1]);
-            const score3Raw = await getGlobalScore(sAddr, scoreTypes[2]);
+// In the loadAndFilterStakeholders function:
+const finalList = [];
+for (const sAddr of allAddrs) {
+  try {
+    const rNum = await getStakeholderType(sAddr);
+    if (Number(rNum) === allowedRole) {
+      // Fetch scores based on the scoreTypes for this role
+      const score1Raw = await getGlobalScore(sAddr, scoreTypes[0]);
+      const score2Raw = await getGlobalScore(sAddr, scoreTypes[1]);
+      const score3Raw = await getGlobalScore(sAddr, scoreTypes[2]);
 
-            const allScores = await getScores(sAddr);
-            const ratingCount = allScores.length;
+      const allScores = await getScores(sAddr);
+      const ratingCount = allScores.length;
 
-            // Convert values (assumes scores are scaled by 1e18)
-            const score1 = Number(score1Raw) / 1e18;
-            const score2 = Number(score2Raw) / 1e18;
-            const score3 = Number(score3Raw) / 1e18;
+      // Get confidence score
+      const confidenceScoreRaw = await getConfidenceScore(sAddr);
+      const confidenceScore = Number(confidenceScoreRaw);
 
-            finalList.push({
-              address: sAddr,
-              role: Number(rNum),
-              score1: score1.toFixed(2),
-              score2: score2.toFixed(2),
-              score3: score3.toFixed(2),
-              score1Type: scoreTypes[0],
-              score2Type: scoreTypes[1],
-              score3Type: scoreTypes[2],
-              ratingCount,
-            });
-          }
-        } catch (err) {
-          console.error(`Could not fetch data for stakeholder ${sAddr}`, err);
-        }
-      }
+      // Convert values (assumes scores are scaled by 1e18)
+      const score1 = Number(score1Raw) / 1e18;
+      const score2 = Number(score2Raw) / 1e18;
+      const score3 = Number(score3Raw) / 1e18;
 
-      setVisibleStakeholders(finalList);
+      finalList.push({
+        address: sAddr,
+        role: Number(rNum),
+        score1: score1.toFixed(2),
+        score2: score2.toFixed(2),
+        score3: score3.toFixed(2),
+        score1Type: scoreTypes[0],
+        score2Type: scoreTypes[1],
+        score3Type: scoreTypes[2],
+        ratingCount,
+        confidenceScore: confidenceScore.toFixed(0) // Add formatted confidence score
+      });
+    }
+  } catch (err) {
+    console.error(`Could not fetch data for stakeholder ${sAddr}`, err);
+  }
+}
+
+setVisibleStakeholders(finalList);
     }
 
     // Only load if we haven't fetched stakeholders yet.
@@ -247,25 +252,29 @@ export default function StakeholderList() {
           <p>No stakeholders to display for your role.</p>
         ) : (
           <div className="stakeholder-grid">
-            {visibleStakeholders.map((st) => (
-              <div
-                key={st.address}
-                className="stakeholder-card"
-                onClick={() => handleSelectStakeholder(st.address)}
-              >
-                <p className="card-label">Address:</p>
-                <p className="card-value">{st.address}</p>
-                <div className="scores-container">
-                  <p>{scoreTypeMapping[st.score1Type]}: <strong>{st.score1}</strong></p>
-                  <p>{scoreTypeMapping[st.score2Type]}: <strong>{st.score2}</strong></p>
-                  <p>{scoreTypeMapping[st.score3Type]}: <strong>{st.score3}</strong></p>
-                </div>
-                <div className="rating-count">
-                  <small>({st.ratingCount} total ratings)</small>
-                </div>
-              </div>
-            ))}
-          </div>
+  {visibleStakeholders.map((st) => (
+    <div
+    key={st.address}
+    className="stakeholder-card"
+    onClick={() => handleSelectStakeholder(st.address)}
+  >
+    <p className="card-label">Address:</p>
+    <p className="card-value">{st.address}</p>
+    <p className="card-label">
+      Type: <span className="card-value-inline">{roleLabels[st.role]}</span>
+    </p>
+    <div className="scores-container">
+      <p>{scoreTypeMapping[st.score1Type]}: <strong>{st.score1}</strong></p>
+      <p>{scoreTypeMapping[st.score2Type]}: <strong>{st.score2}</strong></p>
+      <p>{scoreTypeMapping[st.score3Type]}: <strong>{st.score3}</strong></p>
+      <p>Confidence Score: <strong>{st.confidenceScore || 'N/A'}</strong></p> {/* Added confidence score */}
+    </div>
+    <div className="rating-count">
+      <small>({st.ratingCount} total ratings)</small>
+    </div>
+  </div>
+  ))}
+</div>
         )}
       </section>
       

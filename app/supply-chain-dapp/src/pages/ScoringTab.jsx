@@ -4,6 +4,7 @@ import { useAccount } from 'wagmi';
 import { useGetProductsByOwner } from '../hooks/useProductManager';
 import { useStakeholderRegistry } from '../hooks/useStakeholderRegistry';
 import { useTransactionManager } from '../hooks/useTransactionManager';
+import { TransactionManagerAddress } from '../contracts/TransactionManager';
 import { useToken } from '../hooks/useToken';
 import './ScoringTab.css';
 
@@ -141,18 +142,18 @@ export default function ScoringTab() {
     async function loadVotableProducts() {
       if (!address || !products) return;
       const newVotable = [];
-
+  
       for (const prodId of products) {
         // Get the last transaction ID for this product
         const txId = await getLastTransactionId(prodId);
         console.log('[DEBUG] Product ID:', prodId, 'Last Transaction ID:', txId);
         if (!txId || Number(txId) === 0) continue;
-
+  
         const txDetails = await getTransaction(txId);
         const buyerAddress = txDetails[2];
         const sellerAddr = txDetails[1];
         console.log('[DEBUG] Buyer address:', buyerAddress, 'Seller address:', sellerAddr);
-
+  
         // Product is votable if user is the buyer, and the seller is different
         if (
           buyerAddress?.toLowerCase() === address.toLowerCase() &&
@@ -161,6 +162,10 @@ export default function ScoringTab() {
           // Get seller's role from last transaction info
           const { sellerRole } = await getSellerAndRole(prodId);
           if (!sellerRole) continue;
+  
+          // Check if the user's role is allowed to vote for the seller's role
+          if (allowedVoting[sellerRole] !== myRole) continue;
+  
           // Determine required score types based on seller's role
           const requiredScoreTypes = getRoleBasedScoreTypes(sellerRole);
           let alreadyRated = false;
@@ -176,17 +181,16 @@ export default function ScoringTab() {
           }
         }
       }
-
+  
       console.log('[DEBUG] Votable products:', newVotable);
       setVotableProducts(newVotable);
       setVotableFetched(true);
     }
-
+  
     if (!votableFetched) {
       loadVotableProducts();
     }
-  }, [address, products, getLastTransactionId, getTransaction, isSellerRated, votableFetched]);
-
+  }, [address, products, getLastTransactionId, getTransaction, isSellerRated, votableFetched, myRole]);
   // Fetch pending transactions (load only once)
   useEffect(() => {
     async function fetchPendingTransactions() {
@@ -291,19 +295,19 @@ export default function ScoringTab() {
 
   const handleConfirm = async (pendingTx) => {
     try {
-      console.log('[DEBUG] Confirming transaction:', pendingTx);
-      await confirmSellOperation(pendingTx.transactionId);
-
+      
       const buyerRoleNum = await getStakeholderType(pendingTx.buyer);
       const buyerRole = Number(buyerRoleNum);
       console.log('[DEBUG] Buyer role for tx', pendingTx.transactionId, ':', buyerRole);
-
+      
       // Approve token transfer if not Supplier-Factory or Factory-Supplier
       if (!((myRole === 1 && buyerRole === 2) || (myRole === 2 && buyerRole === 1))) {
         console.log('[DEBUG] Approving reward for tx', pendingTx.transactionId, 'Amount:', pendingTx.rewardAmount);
-        await approve(address, pendingTx.rewardAmount);
+        await approve(TransactionManagerAddress, pendingTx.rewardAmount);
       }
-
+      
+      console.log('[DEBUG] Confirming transaction:', pendingTx);
+      await confirmSellOperation(pendingTx.transactionId);
       setMessage(`Transaction ${String(pendingTx.transactionId)} confirmed.`);
       setPendingBuyRequests((prev) => prev.filter((tx) => tx.transactionId !== pendingTx.transactionId));
     } catch (e) {
@@ -369,24 +373,25 @@ export default function ScoringTab() {
         <p>No products found that you can vote on.</p>
       )}
 
-      <h3>Pending Buy Requests</h3>
-      {pendingBuyRequests.length > 0 ? (
-        <ul className="pending-list">
-          {pendingBuyRequests.map((pendingTx) => (
-            <li key={`${String(pendingTx.transactionId)}-${String(pendingTx.productId)}`}>
-              <p>
-                Product #{String(pendingTx.productId)} - Transaction ID: {String(pendingTx.transactionId)}
-              </p>
-              <p>Buyer: {pendingTx.buyer}</p>
-              <p>Reward: {String(pendingTx.rewardAmount)}</p>
-              <button onClick={() => handleConfirm(pendingTx)}>Confirm</button>
-              <button onClick={() => handleCancel(pendingTx)}>Cancel</button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>No pending buy requests for your products.</p>
-      )}
+<h3>Pending Buy Requests</h3>
+{pendingBuyRequests.length > 0 ? (
+  <ul className="pending-list">
+    {pendingBuyRequests.map((pendingTx) => (
+      <li key={`${String(pendingTx.transactionId)}-${String(pendingTx.productId)}`}>
+        <p>
+          Product #{String(pendingTx.productId)} - Transaction ID: {String(pendingTx.transactionId)}
+        </p>
+        <p>Buyer: {pendingTx.buyer}</p>
+        {/* Remove or comment out the reward amount */}
+        {/* <p>Reward: {String(pendingTx.rewardAmount)}</p> */}
+        <button onClick={() => handleConfirm(pendingTx)}>Confirm</button>
+        <button onClick={() => handleCancel(pendingTx)}>Cancel</button>
+      </li>
+    ))}
+  </ul>
+) : (
+  <p>No pending buy requests for your products.</p>
+)}
 
       {message && <p className="message">{message}</p>}
     </div>

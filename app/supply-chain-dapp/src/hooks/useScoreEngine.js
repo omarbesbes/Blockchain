@@ -91,6 +91,21 @@ export function useScoreEngine() {
       args: [scoreId],
     });
   }
+  /**
+ * Read: get the confidence score for a stakeholder.
+ * @param {string} stakeholder - the address to query
+ * @returns {Promise<number>} The confidence score (0 to 100)
+ */
+async function getConfidenceScore(stakeholder) {
+  return publicClient.readContract({
+    address: scoreEngineAddress,
+    abi: scoreEngineABI,
+    functionName: 'getConfidenceScore',
+    args: [stakeholder],
+  });
+}
+
+
 
   /**
    * Transaction: update confidence scores after a dispute.
@@ -141,15 +156,16 @@ export function useScoreEngine() {
     });
   }
 
-  // Expose all relevant ScoreEngine functions
-  return {
-    rateStakeholder,
-    getGlobalScore,
-    getScores,
-    getStakeholderScoreIds,
-    getScoreById,
-    updateConfidenceAfterDispute,
-    setManualScore,
-    getApplicableScoreTypes,
-  };
+ // Expose all relevant ScoreEngine functions
+return {
+  rateStakeholder,
+  getGlobalScore,
+  getScores,
+  getStakeholderScoreIds,
+  getScoreById,
+  updateConfidenceAfterDispute,
+  setManualScore,
+  getApplicableScoreTypes,
+  getConfidenceScore, // Add the new function here
+};
 }

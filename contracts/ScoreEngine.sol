@@ -380,7 +380,16 @@ function getStakeholderGlobalScores(address stakeholder) external view returns (
     
     return scores;
 }
-
+/**
+ * @notice Returns the confidence score of a stakeholder.
+ * @param stakeholder The address of the stakeholder.
+ * @return The confidence score (0 to 100).
+ */
+function getConfidenceScore(address stakeholder) external view returns (uint256) {
+    uint256 score = confidenceScores[stakeholder];
+    // If confidence score is 0, return 100 (default perfect score)
+    return score == 0 ? 100 : score;
+}
 }
 
 

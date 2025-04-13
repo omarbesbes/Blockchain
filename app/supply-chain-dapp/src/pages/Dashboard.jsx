@@ -16,7 +16,6 @@ export default function Dashboard() {
   // Product Manager hooks
   const { products, error: productsError, isPending: productsLoading } = useGetProductsByOwner(address);
   const { updateProductMetadata, getProductDetails, mintProduct } = useProductManager();
-  const { recordBuyOperation } = useTransactionManager();
 
   // State for role, stakeholder errors, etc.
   const [role, setRole] = useState(null);
@@ -143,7 +142,7 @@ export default function Dashboard() {
       if (role === 'Factory' && address) {
         try {
           const balance = await balanceOf(address);
-          setTokenBalance(Number(balance));
+          setTokenBalance(Number(balance)/1e18);
           setBalanceFetched(true);
         } catch (err) {
           console.error('Error fetching balance:', err);
@@ -206,10 +205,10 @@ export default function Dashboard() {
     
     try {
       // Convert to BigInt for the transaction (assuming 18 decimals)
-      const amountBigInt = BigInt(buyAmount);
-      await buy(amountBigInt);
+      const amountBigInt = BigInt(buyAmount*1e18);
+      await buy(amountBigInt); // Adjust for decimals
       const newBalance = await balanceOf(address);
-      setTokenBalance(Number(newBalance)); 
+      setTokenBalance(Number(newBalance)/1e18); 
       setMessage(`Successfully bought ${buyAmount} tokens.`);
       setBuyAmount('');
     } catch (err) {

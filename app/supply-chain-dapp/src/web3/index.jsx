@@ -11,9 +11,9 @@ const localHardhatChain = {
   name: 'Local Hardhat',
   network: 'localhost',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: ['http://192.168.249.92:8545'] } },
+  rpcUrls: { default: { http: ['http://10.249.225.112:8545'] } },
   blockExplorers: {
-    default: { name: 'Hardhat Explorer', url: 'http://192.168.249.92:8545' },
+    default: { name: 'Hardhat Explorer', url: 'http://10.249.225.112:8545' },
   },
 };
 

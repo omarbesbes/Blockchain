@@ -60,6 +60,12 @@
     color: #888;
     font-size: 0.9rem;
   }
+
+
+.card-value-inline {
+  font-weight: normal;
+  margin-left: 5px; /* Optional spacing */
+}
   .card-value {
     word-break: break-all;
     margin-top: 0.25rem;
