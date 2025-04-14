@@ -363,5 +363,26 @@ function updateRatingStatus(uint256 transactionId, uint8 scoreType, bool accepte
         require(index < _sellerBuyers[seller].length, "Index out of bounds");
         return _sellerBuyers[seller][index];
     }
+/**
+ * @notice Gets the previous transaction ID for a transaction.
+ * @param _transactionId The ID of the current transaction.
+ * @return The previous transaction ID for the same product, or 0 if there is none.
+ */
+function getPreviousTransactionId(uint256 _transactionId) external view returns (uint256) {
+    require(_exists[_transactionId], "Transaction does not exist");
     
+    Transaction storage txn = _transactions[_transactionId];
+    uint256 productId = txn.productId;
+    uint256 prevId = 0;
+    
+    // Find the most recent transaction for this product that occurred before this one
+    for (uint256 i = _transactionId - 1; i > 0; i--) {
+        if (_exists[i] && _transactions[i].productId == productId) {
+            prevId = i;
+            break;
+        }
+    }
+    
+    return prevId;
+}
 }

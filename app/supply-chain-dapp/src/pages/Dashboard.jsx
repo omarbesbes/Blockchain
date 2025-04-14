@@ -85,31 +85,36 @@ export default function Dashboard() {
     }
   }, [address, getStakeholderType, role]);
 
-  // 2) Fetch scores (only once per address)
-  useEffect(() => {
-    async function fetchApplicableScores() {
-      if (!address) return;
-      try {
-        const applicableTypes = await getApplicableScoreTypes(address);
-        const scoresData = await Promise.all(
-          applicableTypes.map(async (scoreId) => {
-            const rawScore = await getGlobalScore(address, scoreId);
-            const formattedScore = Number(rawScore) / 1e18;
-            return { name: scoreTypeMapping[scoreId] || `Score ${scoreId}`, value: formattedScore };
-          })
-        );
-        console.log(scoresData);
-        setScores(scoresData);
-        setScoresFetched(true);
-      } catch (err) {
-        console.error('Error fetching scores:', err);
-      }
+// 2) Fetch scores (only once per address) - but skip for Consumers
+useEffect(() => {
+  async function fetchApplicableScores() {
+    if (!address || role === 'Consumer') {
+      setScores([]);
+      setScoresFetched(true);
+      return;
     }
-    if (!scoresFetched) {
-      fetchApplicableScores();
+    
+    try {
+      const applicableTypes = await getApplicableScoreTypes(address);
+      const scoresData = await Promise.all(
+        applicableTypes.map(async (scoreId) => {
+          const rawScore = await getGlobalScore(address, scoreId);
+          const formattedScore = Number(rawScore) / 1e18;
+          return { name: scoreTypeMapping[scoreId] || `Score ${scoreId}`, value: formattedScore };
+        })
+      );
+      console.log(scoresData);
+      setScores(scoresData);
+      setScoresFetched(true);
+    } catch (err) {
+      console.error('Error fetching scores:', err);
     }
-  }, [address, getApplicableScoreTypes, getGlobalScore, scoresFetched, scoreTypeMapping]);
-
+  }
+  
+  if (!scoresFetched) {
+    fetchApplicableScores();
+  }
+}, [address, getApplicableScoreTypes, getGlobalScore, scoresFetched, scoreTypeMapping, role]);
   // 3) Fetch product details when products update (only once)
   useEffect(() => {
     async function fetchAllProductDetails() {
@@ -136,24 +141,23 @@ export default function Dashboard() {
     }
   }, [products, productsLoading, productsError, getProductDetails, detailsFetched]);
 
-  // 4) Fetch token balance when role is "Factory" (only once)
-  useEffect(() => {
-    async function fetchBalance() {
-      if (role === 'Factory' && address) {
-        try {
-          const balance = await balanceOf(address);
-          setTokenBalance(Number(balance)/1e18);
-          setBalanceFetched(true);
-        } catch (err) {
-          console.error('Error fetching balance:', err);
-        }
+  // 4) Fetch token balance for all users (not just Factory)
+useEffect(() => {
+  async function fetchBalance() {
+    if (address) {
+      try {
+        const balance = await balanceOf(address);
+        setTokenBalance(Number(balance)/1e18);
+        setBalanceFetched(true);
+      } catch (err) {
+        console.error('Error fetching balance:', err);
       }
     }
-    if (role === 'Factory' && !balanceFetched) {
-      fetchBalance();
-    }
-  }, [role, address, balanceOf, balanceFetched]);
-
+  }
+  if (!balanceFetched && address) {
+    fetchBalance();
+  }
+}, [address, balanceOf, balanceFetched]);
   if (!isConnected) {
     return (
       <div className="dashboard-container">
@@ -249,38 +253,42 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* Section: Show applicable scores for this stakeholder */}
-      <section className="dashboard-section">
-        <h2>Your Scores</h2>
-        {scores.length === 0 ? (
-          <p>Loading scores...</p>
-        ) : (
-          <ul className="scores-list">
-            {scores.map((score, index) => (
-              <li key={index} className="score-item">
-                <strong>{score.name}:</strong> {score.value.toString()}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* Section: Show applicable scores for this stakeholder (except for Consumers) */}
+{role !== 'Consumer' && (
+  <section className="dashboard-section">
+    <h2>Your Scores</h2>
+    {scores.length === 0 ? (
+      <p>Loading scores...</p>
+    ) : (
+      <ul className="scores-list">
+        {scores.map((score, index) => (
+          <li key={index} className="score-item">
+            <strong>{score.name}:</strong> {score.value.toFixed(2)}
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+)}
 
-      {/* Section: Mint a new product */}
-      <section className="dashboard-section">
-        <h2>Mint a New Product</h2>
-        <div className="metadata-update">
-          <input
-            type="text"
-            className="dashboard-input"
-            value={newProductMetadata}
-            onChange={(e) => setNewProductMetadata(e.target.value)}
-            placeholder="Enter product metadata URI"
-          />
-          <button className="btn btn-primary" onClick={handleMintProduct}>
-            Mint Product
-          </button>
-        </div>
-      </section>
+      {/* Section: Mint a new product (Factory and Supplier) */}
+{(role === 'Factory' || role === 'Supplier') && (
+  <section className="dashboard-section">
+    <h2>Mint a New Product</h2>
+    <div className="metadata-update">
+      <input
+        type="text"
+        className="dashboard-input"
+        value={newProductMetadata}
+        onChange={(e) => setNewProductMetadata(e.target.value)}
+        placeholder="Enter product metadata URI"
+      />
+      <button className="btn btn-primary" onClick={handleMintProduct}>
+        Mint Product
+      </button>
+    </div>
+  </section>
+)}
 
       {/* Section: Update product metadata (Factory only) */}
       {role === 'Factory' && (
@@ -308,26 +316,28 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* Section: Buy tokens (Factory only) */}
-      {role === 'Factory' && (
-        <section className="dashboard-section token-section">
-          <h2>Your Token Balance</h2>
-          <p>Balance: {tokenBalance}</p>
-          <div className="token-buy">
-            <input
-              type="text"
-              className="dashboard-input"
-              placeholder="Amount of tokens to buy"
-              value={buyAmount}
-              onChange={(e) => setBuyAmount(e.target.value)}
-            />
-            <button className="btn btn-primary" onClick={handleBuyTokens}>
-              Buy Tokens
-            </button>
-          </div>
-          {message && <p className="message">{message}</p>}
-        </section>
-      )}
+      {/* Section: Token Balance (visible to all users) */}
+<section className="dashboard-section token-section">
+  <h2>Your Token Balance</h2>
+  <p>Balance: {tokenBalance}</p>
+  
+  {/* Buy tokens functionality (Factory only) */}
+  {role === 'Factory' && (
+    <div className="token-buy">
+      <input
+        type="text"
+        className="dashboard-input"
+        placeholder="Amount of tokens to buy"
+        value={buyAmount}
+        onChange={(e) => setBuyAmount(e.target.value)}
+      />
+      <button className="btn btn-primary" onClick={handleBuyTokens}>
+        Buy Tokens
+      </button>
+      {message && <p className="message">{message}</p>}
+    </div>
+  )}
+</section>
     </div>
   );
 }

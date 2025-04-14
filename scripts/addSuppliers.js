@@ -16,7 +16,7 @@ async function main() {
   // Define roles and metadata URIs.
   // Adjust role numbers as defined in your contract's enum.
   const role1 = 1, metadata1 = "ipfs://metadata_for_stakeholder1"; // e.g., Factory
-  const role2 = 1, metadata2 = "ipfs://metadata_for_stakeholder2"; // e.g., Distributor
+  const role2 = 5, metadata2 = "ipfs://metadata_for_stakeholder2"; // e.g., Distributor
   const role3 = 1, metadata3 = "ipfs://metadata_for_stakeholder3"; // e.g., Retailer
 
   // Register Stakeholder 1 using stakeholder1 account
