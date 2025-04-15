@@ -1,4 +1,3 @@
-//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\contracts\DisputeManager.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 

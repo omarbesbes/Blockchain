@@ -123,8 +123,10 @@ describe("TransactionManager", function () {
       expect(event.args.seller).to.equal(await supplier.getAddress());
       expect(event.args.productId).to.equal(0);
 
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(0); // Pending
+      const txn = await transactionManager.getTransaction(1);
+      console.log(txn);
+      //checking txn.status
+      expect(txn[5]).to.equal(0); // Pending
     });
 
     it("records a valid Retailer -> Distributor purchase (retailer is buyer, distributor is seller)", async function () {
@@ -137,8 +139,9 @@ describe("TransactionManager", function () {
       expect(event.args.seller).to.equal(await distributor.getAddress());
       expect(event.args.productId).to.equal(0);
 
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(0); // Pending
+      const txn = await transactionManager.getTransaction(1);
+      //checking txn.status
+      expect(txn[5]).to.equal(0); // Pending
     });
 
     it("records a valid Consumer -> Retailer purchase (consumer is buyer, retailer is seller)", async function () {
@@ -151,8 +154,9 @@ describe("TransactionManager", function () {
       expect(event.args.seller).to.equal(await retailer.getAddress());
       expect(event.args.productId).to.equal(0);
 
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(0); // Pending
+      const txn = await transactionManager.getTransaction(1);
+      //checking txn.status
+      expect(txn[5]).to.equal(0); // Pending
     });
 
     it("reverts for an invalid buyer-seller combination (e.g. Factory->Distributor) for productId=0", async function () {
@@ -162,7 +166,7 @@ describe("TransactionManager", function () {
           await distributor.getAddress(),
           0
         )
-      ).to.be.revertedWith("Invalid buyer-seller role combination for transaction");
+      ).to.be.revertedWith("Invalid buyer-seller role combination");
     });
   });
 
@@ -209,7 +213,7 @@ describe("TransactionManager", function () {
         transactionManager
           .connect(consumer)
           .recordBuyOperation(await factory.getAddress(), mintedProductId)
-      ).to.be.revertedWith("Invalid buyer-seller role combination for transaction");
+      ).to.be.revertedWith("Invalid buyer-seller role combination");
     });
   });
 
@@ -236,8 +240,9 @@ describe("TransactionManager", function () {
       const finalRetailerBalance = await token.balanceOf(await retailer.getAddress());
       expect(finalRetailerBalance-(initialRetailerBalance)).to.equal(REWARD_AMOUNT);
 
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(1); // Validated
+      const txn = await transactionManager.getTransaction(1);
+      //checking txn.status
+      expect(txn[5]).to.equal(1); // Validated
     });
 
     it("allows seller (retailer) to confirm a sale to consumer, depositing tokens to ScoreEngine", async function () {
@@ -256,8 +261,9 @@ describe("TransactionManager", function () {
       const finalScoreEngineBalance = await token.balanceOf(await scoreEngine.getAddress());
       expect(finalScoreEngineBalance-(initialScoreEngineBalance)).to.equal(REWARD_AMOUNT);
 
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(1); // Validated
+      const txn = await transactionManager.getTransaction(1);
+      //checking txn.status
+      expect(txn[5]).to.equal(1); // Validated
     });
 
     it("allows seller (factory) to confirm a sale to distributor (minted product), deposit from factory->distributor", async function () {
@@ -288,8 +294,9 @@ describe("TransactionManager", function () {
       const productDetails = await productManager.getProductDetails(productId);
       expect(productDetails.currentOwner).to.equal(await distributor.getAddress());
 
-      const txn = await transactionManager.transactions(1);
-      expect(txn.status).to.equal(1); // Validated
+      const txn = await transactionManager.getTransaction(1);
+      //checking txn.status
+      expect(txn[5]).to.equal(1); // Validated
     });
 
     it("reverts if confirmSellOperation is called by a non-designated seller", async function () {
@@ -329,10 +336,11 @@ describe("TransactionManager", function () {
       const event = await getEvent(txRate, "SellerRated", transactionManager);
 
       expect(event.args.buyer).to.equal(await factory.getAddress());
-      expect(event.args.seller).to.equal(await supplier.getAddress());
+      expect(event.args.rated).to.equal(await supplier.getAddress());
 
-      const txn = await transactionManager.transactions(1);
-      expect(txn.rated).to.equal(true);
+      await expect(
+        transactionManager.getTransactionScore(1, scoretype=0, false)
+      ).not.to.be.reverted;
     });
 
     it("allows Retailer (buyer) to rate Distributor (seller)", async function () {
@@ -353,10 +361,11 @@ describe("TransactionManager", function () {
       const event = await getEvent(txRate, "SellerRated", transactionManager);
 
       expect(event.args.buyer).to.equal(await retailer.getAddress());
-      expect(event.args.seller).to.equal(await distributor.getAddress());
+      expect(event.args.rated).to.equal(await distributor.getAddress());
 
-      const txn = await transactionManager.transactions(1);
-      expect(txn.rated).to.equal(true);
+      await expect(
+        transactionManager.getTransactionScore(1, scoretype=6, false)
+      ).not.to.be.reverted;
     });
 
     it("allows Consumer (buyer) to rate Retailer (seller)", async function () {
@@ -377,10 +386,11 @@ describe("TransactionManager", function () {
       const event = await getEvent(txRate, "SellerRated", transactionManager);
 
       expect(event.args.buyer).to.equal(await consumer.getAddress());
-      expect(event.args.seller).to.equal(await retailer.getAddress());
+      expect(event.args.rated).to.equal(await retailer.getAddress());
 
-      const txn = await transactionManager.transactions(1);
-      expect(txn.rated).to.equal(true);
+      await expect(
+        transactionManager.getTransactionScore(1, scoretype=10, false)
+      ).not.to.be.reverted;
     });
 
     it("reverts if a non-buyer calls buyerRateSeller", async function () {
@@ -394,7 +404,7 @@ describe("TransactionManager", function () {
       // consumer tries to rate (not the buyer)
       await expect(
         transactionManager.connect(consumer).buyerRateSeller(1, 0, 8, 0, false)
-      ).to.be.revertedWith("Only buyer can rate the seller");
+      ).to.be.revertedWith("Only buyer can rate");
     });
 
     it("reverts if the transaction is not validated yet", async function () {
@@ -426,7 +436,7 @@ describe("TransactionManager", function () {
       // 2nd rating attempt
       await expect(
         transactionManager.connect(factory).buyerRateSeller(1, 0, 7, 0, false)
-      ).to.be.revertedWith("Seller already rated for this transaction");
+      ).to.be.revertedWith("Already rated seller for this score type");
     });
 
     it("reverts if the roles do not match an allowed buyer-seller rating scenario", async function () {
@@ -441,7 +451,7 @@ describe("TransactionManager", function () {
       // Now seller tries to call buyerRateSeller
       await expect(
         transactionManager.connect(supplier).buyerRateSeller(1, 3, 8, 0, false)
-      ).to.be.revertedWith("Only buyer can rate the seller");
+      ).to.be.revertedWith("Only buyer can rate");
     });
   });
 
@@ -463,11 +473,20 @@ describe("TransactionManager", function () {
     const txBuy1 = await transactionManager
       .connect(distributor)
       .recordBuyOperation(await factory.getAddress(), productId);
-    await txBuy1.wait();
+
+    const receipt = await txBuy1.wait();
+    const event = receipt.logs
+      .map(log => {
+        try {
+          return transactionManager.interface.parseLog(log);
+        } catch { return null; }
+      })
+      .find(e => e && e.name === "BuyOperationRecorded");
+    const txnId = event.args.transactionId;
 
     // Factory approves deposit, confirms
     await token.connect(factory).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-    await transactionManager.connect(factory).confirmSellOperation(1);
+    await transactionManager.connect(factory).confirmSellOperation(txnId);
 
     // Product now with Distributor
 
@@ -477,9 +496,19 @@ describe("TransactionManager", function () {
       .recordBuyOperation(await distributor.getAddress(), productId);
     await txBuy2.wait();
 
+    const receipt2 = await txBuy2.wait();
+    const event2 = receipt2.logs
+      .map(log => {
+        try {
+          return transactionManager.interface.parseLog(log);
+        } catch { return null; }
+      })
+      .find(e => e && e.name === "BuyOperationRecorded");
+    const txnId2 = event2.args.transactionId;
+
     // Distributor approves deposit, confirms
     await token.connect(distributor).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-    await transactionManager.connect(distributor).confirmSellOperation(2);
+    await transactionManager.connect(distributor).confirmSellOperation(txnId2);
 
     // Product now with Retailer
 
@@ -489,9 +518,19 @@ describe("TransactionManager", function () {
       .recordBuyOperation(await retailer.getAddress(), productId);
     await txBuy3.wait();
 
+    const receipt3 = await txBuy3.wait();
+    const event3 = receipt3.logs
+      .map(log => {
+        try {
+          return transactionManager.interface.parseLog(log);
+        } catch { return null; }
+      })
+      .find(e => e && e.name === "BuyOperationRecorded");
+    const txnId3 = event3.args.transactionId;
+
     // Retailer approves deposit, confirms
     await token.connect(retailer).approve(transactionManager.getAddress(), REWARD_AMOUNT);
-    await transactionManager.connect(retailer).confirmSellOperation(3);
+    await transactionManager.connect(retailer).confirmSellOperation(txnId3);
 
     // Product now with Consumer
 
@@ -501,6 +540,10 @@ describe("TransactionManager", function () {
       .buyerRateSeller(3, /*scoreType=*/10, /*scoreValue=*/8, /*productId=*/0, /*ratingFactory=*/false);
     await txRateRetailer.wait();
 
+    console.log("Retailer address:", await retailer.getAddress());
+    console.log("Consumer address:", await consumer.getAddress());
+    console.log("factory address:", await factory.getAddress());
+
     // Step 5b: Consumer also rates the Factory (ratingFactory=true)
     // Must pass the minted productId so the contract can identify the original creator (factory).
     const txRateFactory = await transactionManager
@@ -508,6 +551,6 @@ describe("TransactionManager", function () {
       .buyerRateSeller(3, /*scoreType=*/5, /*scoreValue=*/9, productId, /*ratingFactory=*/true);
     const eventRate = await getEvent(txRateFactory, "SellerRated", transactionManager);
     expect(eventRate.args.buyer).to.equal(await consumer.getAddress());
-    expect(eventRate.args.seller).to.equal(await factory.getAddress());
+    expect(eventRate.args.rated).to.equal(await factory.getAddress());
   });
 });

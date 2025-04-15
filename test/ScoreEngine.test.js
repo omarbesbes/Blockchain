@@ -199,6 +199,7 @@ describe("ScoreEngine", function () {
       let dispute = {
         disputeId: 1,
         ratingId: 1,
+        scoreType: ScoreType.TRUST,
         challenger: consumer.address,
         respondent: factory.address,
         depositChallenger: ethers.parseEther("1"),
@@ -222,6 +223,7 @@ describe("ScoreEngine", function () {
       let dispute = {
         disputeId: 3,
         ratingId: 1,
+        scoreType: ScoreType.TRUST,
         challenger: factory.address,
         respondent: consumer.address,
         depositChallenger: ethers.parseEther("1"),

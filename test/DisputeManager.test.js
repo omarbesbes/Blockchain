@@ -154,7 +154,7 @@ describe("DisputeManager with Retailer→Distributor purchase", function () {
     // respondent => actorA (the rater)
     const tx = await disputeManager
       .connect(actorB)
-      .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+      .initiateDispute(ratingId, scoretype=6, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
     const receipt = await tx.wait();
     const eargs = getEventArgs(receipt, "DisputeInitiated", disputeManager.interface);
 
@@ -168,7 +168,7 @@ describe("DisputeManager with Retailer→Distributor purchase", function () {
     await expect(
       disputeManager
         .connect(actorB)
-        .initiateDispute(ratingId, await actorA.getAddress(), { value: ethers.parseEther("0.5") })
+        .initiateDispute(ratingId, scoretype=6, await actorA.getAddress(), { value: ethers.parseEther("0.5") })
     ).to.be.revertedWith("Challenger deposit must be equal to DEPOSIT_AMOUNT");
   });
 
@@ -182,7 +182,7 @@ describe("DisputeManager with Retailer→Distributor purchase", function () {
       // Initiate
       const tx = await disputeManager
         .connect(actorB)
-        .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+        .initiateDispute(ratingId, scoretype=6, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
       const rx = await tx.wait();
       disputeId = getEventArgs(rx, "DisputeInitiated", disputeManager.interface).disputeId;
     });
@@ -201,7 +201,7 @@ describe("DisputeManager with Retailer→Distributor purchase", function () {
       // Initiate + respond
       const tx1 = await disputeManager
         .connect(actorB)
-        .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+        .initiateDispute(ratingId, scoretype=6, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
       const rx1 = await tx1.wait();
       disputeId = getEventArgs(rx1, "DisputeInitiated", disputeManager.interface).disputeId;
 
@@ -223,7 +223,7 @@ describe("DisputeManager with Retailer→Distributor purchase", function () {
       // Initiate + respond
       const tx1 = await disputeManager
         .connect(actorB)
-        .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+        .initiateDispute(ratingId, scoretype=6, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
       const rx1 = await tx1.wait();
       disputeId = getEventArgs(rx1, "DisputeInitiated", disputeManager.interface).disputeId;
 
@@ -260,7 +260,7 @@ describe("DisputeManager with Retailer→Distributor purchase", function () {
     // 2) distributor initiates dispute
     const tx1 = await disputeManager
       .connect(actorB)
-      .initiateDispute(ratingId, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
+      .initiateDispute(ratingId, scoretype=6, await actorA.getAddress(), { value: DEPOSIT_AMOUNT });
     const rx1 = await tx1.wait();
     disputeId = getEventArgs(rx1, "DisputeInitiated", disputeManager.interface).disputeId;
 

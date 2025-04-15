@@ -202,8 +202,11 @@ function buyerRateSeller(
 
     emit SellerRated(transactionId, msg.sender, toBeRated);
 
-    // Track this rated transaction (awaiting buyer acceptance/dispute)
-    pendingRatedTransactions[txn.seller].push(transactionId);
+    if (!ratingFactory){
+        // Factory cannot choose to accept/dispute a rating given by consumer
+        // Track this rated transaction (awaiting buyer acceptance/dispute)
+        pendingRatedTransactions[txn.seller].push(transactionId);
+    }
 }
 
 function getTransactionScore(uint256 transactionId, uint8 scoreType, bool isFactory) external view returns (uint8) {
