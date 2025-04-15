@@ -45,9 +45,9 @@ export default function RootLayout() {
           Disconnect
         </button>
         <Link to="/dashboard">Dashboard</Link>
-        <Link to="/stakeholders">Stakeholders</Link>
-        <Link to="/scoring">Scoring</Link>
-        <Link to="/challenges">Challenges</Link>
+        <Link to="/stakeholders">Market & Transactions</Link>
+        <Link to="/scoring">Rating</Link>
+        <Link to="/challenges">Disputes & Challenges</Link>
       </nav>
       <main>
         <Outlet />

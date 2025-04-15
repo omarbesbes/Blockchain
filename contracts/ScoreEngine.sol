@@ -109,78 +109,112 @@ contract ScoreEngine is Ownable {
     }
 
     /**
-     * @notice Rate a stakeholder with a specific score type and numeric value.
-     */
-    function rateStakeholder(
-        address _rated,
-        ScoreType _scoreType,
-        uint8 _value
-    ) external {
-        require(_value > 0 && _value <= 10, "Score value must be between 1 and 10");
-        require(registry.isRegistered(_rated), "Rated stakeholder not registered");
+ * @notice Rate a stakeholder with a specific score type and numeric value.
+ */
+function rateStakeholder(
+    address _rated,
+    ScoreType _scoreType,
+    uint8 _value
+) external {
+    require(_value > 0 && _value <= 10, "Score value must be between 1 and 10");
+    require(registry.isRegistered(_rated), "Rated stakeholder not registered");
 
-        // Identify roles of rater and rated.
-        StakeholderRegistry.Role raterRole = registry.getRole(tx.origin);
-        StakeholderRegistry.Role ratedRole = registry.getRole(_rated);
+    // Identify roles of rater and rated.
+    StakeholderRegistry.Role raterRole = registry.getRole(tx.origin);
+    StakeholderRegistry.Role ratedRole = registry.getRole(_rated);
 
-        require(raterRole != StakeholderRegistry.Role.None, "Rater not valid");
-        require(ratedRole != StakeholderRegistry.Role.None, "Rated not valid");
-        require(
-            canRate(raterRole, ratedRole, _scoreType),
-            "Invalid role or score type for this rating"
-        );
+    require(raterRole != StakeholderRegistry.Role.None, "Rater not valid");
+    require(ratedRole != StakeholderRegistry.Role.None, "Rated not valid");
+    require(
+        canRate(raterRole, ratedRole, _scoreType),
+        "Invalid role or score type for this rating"
+    );
 
-        //initialize condifenceScores
-        if (confidenceScores[tx.origin] == 0) {
-            confidenceScores[tx.origin] = 100;
-        }
+    //initialize condifenceScores
+    if (confidenceScores[tx.origin] == 0) {
+        confidenceScores[tx.origin] = 100;
+    }
 
-        // Compute the new exponential moving average (EMA) for this score type.
-        uint256 newEMA;
-        if (scoreCountsByType[_rated][_scoreType] == 0) {
-            // First rating: set EMA to the raw value scaled by PRECISION.
-            newEMA = uint256(_value) * PRECISION;
+    // Compute the new exponential moving average (EMA) for this score type.
+    uint256 newEMA;
+    if (scoreCountsByType[_rated][_scoreType] == 0) {
+        // First rating: set EMA to the raw value scaled by PRECISION.
+        newEMA = uint256(_value) * PRECISION;
+    } else {
+        uint effectiveAlpha;
+        if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
+            effectiveAlpha = (BASE_ALPHA * confidenceScores[tx.origin]) / 100;
         } else {
-            uint effectiveAlpha;
-            if (raterRole == StakeholderRegistry.Role.Factory || raterRole == StakeholderRegistry.Role.Retailer) {
-                effectiveAlpha = (BASE_ALPHA * confidenceScores[tx.origin]) / 100;
-            } else {
-                effectiveAlpha = BASE_ALPHA;
-            }
-            newEMA = (effectiveAlpha * (uint256(_value) * PRECISION) + (100 - effectiveAlpha) * globalScoresByType[_rated][_scoreType]) / 100;
+            effectiveAlpha = BASE_ALPHA;
         }
-        globalScoresByType[_rated][_scoreType] = newEMA;
-        scoreCountsByType[_rated][_scoreType]++;
+        newEMA = (effectiveAlpha * (uint256(_value) * PRECISION) + (100 - effectiveAlpha) * globalScoresByType[_rated][_scoreType]) / 100;
+    }
+    globalScoresByType[_rated][_scoreType] = newEMA;
+    scoreCountsByType[_rated][_scoreType]++;
 
-        Score memory newScore = Score({
-            scoreType: _scoreType,
-            value: newEMA,
-            rater: tx.origin,
-            timestamp: block.timestamp
-        });
-        stakeholderScores[_rated].push(newScore);
+    Score memory newScore = Score({
+        scoreType: _scoreType,
+        value: newEMA,
+        rater: tx.origin,
+        timestamp: block.timestamp
+    });
+    stakeholderScores[_rated].push(newScore);
 
-        scoreIdCounter++;
-        uint256 newScoreId = scoreIdCounter;
-        scoreHistory[newScoreId] = ScoreRecord({
-            scoreType: _scoreType,
-            value: newEMA,
-            rater: tx.origin,
-            rated: _rated,
-            timestamp: block.timestamp
-        });
-        stakeholderScoreIds[_rated].push(newScoreId);
+    scoreIdCounter++;
+    uint256 newScoreId = scoreIdCounter;
+    scoreHistory[newScoreId] = ScoreRecord({
+        scoreType: _scoreType,
+        value: newEMA,
+        rater: tx.origin,
+        rated: _rated,
+        timestamp: block.timestamp
+    });
+    stakeholderScoreIds[_rated].push(newScoreId);
 
-        emit ScoreAssigned(tx.origin, _rated, _scoreType, newEMA, block.timestamp, newScoreId);
+    emit ScoreAssigned(tx.origin, _rated, _scoreType, newEMA, block.timestamp, newScoreId);
 
-        // handle returning of small reward for article review that was included in the initial price of the device
-        if(raterRole == StakeholderRegistry.Role.Consumer && ratedRole == StakeholderRegistry.Role.Factory) {
+    // handle returning of small reward for article review that was included in the initial price of the device
+    if(raterRole == StakeholderRegistry.Role.Consumer && ratedRole == StakeholderRegistry.Role.Factory) {
+        // Check if all three score types for Factory have been rated by this consumer
+        bool hasRatedProductQuality = scoreCountsByType[_rated][ScoreType.PRODUCT_QUALITY] > 0 && 
+                                     hasRatedTypeByRater(tx.origin, _rated, ScoreType.PRODUCT_QUALITY);
+        bool hasRatedWarranty = scoreCountsByType[_rated][ScoreType.WARRANTY] > 0 && 
+                               hasRatedTypeByRater(tx.origin, _rated, ScoreType.WARRANTY);
+        bool hasRatedEcoRating = scoreCountsByType[_rated][ScoreType.ECO_RATING] > 0 && 
+                                hasRatedTypeByRater(tx.origin, _rated, ScoreType.ECO_RATING);
+
+        // Only reward if all three score types have been rated (including the current rating)
+        if (hasRatedProductQuality && hasRatedWarranty && hasRatedEcoRating) {
             require(address(token) != address(0), "Token address not set");
             require(token.balanceOf(address(this)) >= REWARD_AMOUNT, "Insufficient reward funds in contract");
             bool sent = token.transfer(tx.origin, REWARD_AMOUNT);
             require(sent, "Token transfer failed");
         }
     }
+}
+
+/**
+ * @dev Helper function to check if a specific rater has rated a specific type for a stakeholder
+ * @param rater The address of the rater
+ * @param rated The address of the rated stakeholder
+ * @param scoreType The type of score to check
+ * @return bool True if the rater has rated this type for the stakeholder
+ */
+function hasRatedTypeByRater(
+    address rater,
+    address rated,
+    ScoreType scoreType
+) internal view returns (bool) {
+    // Check the stakeholder's score history for a matching rating
+    uint256[] memory scoreIds = stakeholderScoreIds[rated];
+    for (uint i = 0; i < scoreIds.length; i++) {
+        ScoreRecord memory record = scoreHistory[scoreIds[i]];
+        if (record.rater == rater && record.scoreType == scoreType) {
+            return true;
+        }
+    }
+    return false;
+}
 
     /**
      * @dev After a dispute is finalized, call this function to update the rater's
@@ -380,7 +414,16 @@ function getStakeholderGlobalScores(address stakeholder) external view returns (
     
     return scores;
 }
-
+/**
+ * @notice Returns the confidence score of a stakeholder.
+ * @param stakeholder The address of the stakeholder.
+ * @return The confidence score (0 to 100).
+ */
+function getConfidenceScore(address stakeholder) external view returns (uint256) {
+    uint256 score = confidenceScores[stakeholder];
+    // If confidence score is 0, return 100 (default perfect score)
+    return score == 0 ? 100 : score;
+}
 }
 
 

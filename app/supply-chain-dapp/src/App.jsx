@@ -62,9 +62,8 @@ function ChainIdChecker() {
 
 export default function App() {
   return (
-    <div>
-      <ChainIdChecker />
+
       <RouterProvider router={router} />
-    </div>
+
   );
 }

@@ -11,13 +11,13 @@ async function main() {
   console.log("Attached to StakeholderRegistry at:", await registry.getAddress());
 
   // // Get signers (these simulate different accounts)
-  const [owner, stakeholder1, stakeholder2, stakeholder3,acc4,acc5,acc6] = await ethers.getSigners();
+  const [owner, stakeholder1, stakeholder2, stakeholder3] = await ethers.getSigners();
 
   // Define roles and metadata URIs.
   // Adjust role numbers as defined in your contract's enum.
   const role1 = 2, metadata1 = "ipfs://metadata_for_stakeholder1"; // e.g., Factory
   const role2 = 3, metadata2 = "ipfs://metadata_for_stakeholder2"; // e.g., Distributor
-  const role3 = 2, metadata3 = "ipfs://metadata_for_stakeholder3"; // e.g., Retailer
+  const role3 = 4, metadata3 = "ipfs://metadata_for_stakeholder3"; // e.g., Factory
 
   // Register Stakeholder 1 using stakeholder1 account
   const tx1 = await registry.connect(stakeholder1).registerStakeholder(role1, metadata1);

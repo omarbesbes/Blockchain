@@ -126,7 +126,7 @@ async function buy(amount) {
     functionName: 'buy',
     args: [amount],
     account: walletClient.account,
-    value: amount, // Send ETH equal to amount
+    value:(amount)/1000n, // Convert amount to wei (assuming amount is in ether)
   });
   return publicClient.waitForTransactionReceipt({ hash: txHash });
 }

@@ -175,6 +175,19 @@ export function useTransactionManager() {
       args: [seller],
     });
   }
+  /**
+ * Get the previous transaction ID for a transaction.
+ * @param {number} transactionId - The current transaction ID
+ * @returns {Promise<number>} - Previous transaction ID or 0 if none
+ */
+async function getPreviousTransactionId(transactionId) {
+  return publicClient.readContract({
+    address: TransactionManagerAddress,
+    abi: TransactionManagerABI,
+    functionName: 'getPreviousTransactionId',
+    args: [transactionId],
+  });
+}
 
   // NEW 14. Check if a buyer has purchased from a seller (read-only)
   async function hasBoughtFromSeller(seller, buyer) {
@@ -236,6 +249,7 @@ export function useTransactionManager() {
     getSellerBuyerCount,
     getSellerBuyerAtIndex,
     getTransactionScore,
+    getPreviousTransactionId,
     isScoreTypeProcessed,
 
   };
