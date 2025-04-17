@@ -2,7 +2,7 @@ import React from 'react';
 import '@rainbow-me/rainbowkit/styles.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPublicClient, http } from 'viem';
-import { createConfig, WagmiProvider } from 'wagmi';
+import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, getDefaultConfig } from '@rainbow-me/rainbowkit';
 
 // Define your custom chain for Hardhat with chain ID 31137

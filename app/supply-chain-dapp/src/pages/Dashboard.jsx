@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useStakeholderRegistry } from '../hooks/useStakeholderRegistry';
-import { useTransactionManager } from '../hooks/useTransactionManager';
 import { useGetProductsByOwner, useProductManager } from '../hooks/useProductManager';
 import { useScoreEngine } from '../hooks/useScoreEngine';
 import { useToken } from '../hooks/useToken';
