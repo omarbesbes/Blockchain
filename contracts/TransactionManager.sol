@@ -35,19 +35,19 @@ contract TransactionManager {
     mapping(uint256 => Transaction) private _transactions;
     mapping(uint256 => bool) private _exists;
 
-    // NEW: Mapping to track transactions that have been rated but are awaiting buyer action.
+    //  Mapping to track transactions that have been rated but are awaiting buyer action.
     // The seller address is the key.
     mapping(address => uint256[]) public pendingRatedTransactions;
-    // NEW: Mapping to record whether a transaction rating was accepted (true) or disputed (false).
+    //  Mapping to record whether a transaction rating was accepted (true) or disputed (false).
     mapping(uint256 => bool) public ratingAcceptedStatus;
-    // NEW: Mapping to track which score types have been acknowledged or disputed for a transaction
+    //  Mapping to track which score types have been acknowledged or disputed for a transaction
     mapping(uint256 => mapping(uint8 => bool)) public scoreTypeProcessed;
 
-    // NEW: Mapping to track all unique buyers for each seller
+    //  Mapping to track all unique buyers for each seller
     mapping(address => address[]) private _sellerBuyers;
-    // NEW: Mapping to track if a buyer has already been added to a seller's buyers list
+    //  Mapping to track if a buyer has already been added to a seller's buyers list
     mapping(address => mapping(address => bool)) private _buyerExistsForSeller;
-    // NEW: Mapping to store score values for each transaction, score type, and target type (seller/factory)
+    //  Mapping to store score values for each transaction, score type, and target type (seller/factory)
     mapping(uint256 => mapping(uint8 => mapping(bool => uint8))) public transactionScores;
 
 
@@ -59,10 +59,8 @@ contract TransactionManager {
     );
     event TransactionValidated(uint256 indexed transactionId);
     event SellerRated(uint256 indexed transactionId, address indexed buyer, address indexed rated);
-    // NEW events:
     event RatingAccepted(uint256 indexed transactionId, address indexed buyer);
     event RatingDisputed(uint256 indexed transactionId, address indexed buyer);
-    // NEW: Event emitted when a new buyer is added to a seller's list
     event BuyerAddedForSeller(address indexed seller, address indexed buyer);
 
     constructor(
@@ -136,7 +134,7 @@ contract TransactionManager {
             productManager.transferProduct(txn.buyer, txn.productId);
         }
         
-        // NEW: Track this buyer for this seller if not already tracked
+        //  Track this buyer for this seller if not already tracked
         if (!_buyerExistsForSeller[txn.seller][txn.buyer]) {
             _sellerBuyers[txn.seller].push(txn.buyer);
             _buyerExistsForSeller[txn.seller][txn.buyer] = true;
@@ -148,8 +146,6 @@ contract TransactionManager {
     }
 
     // Buyer rates the seller (or factory) for a given score type.
-    // Checks that the rating for the provided scoreType has not already been recorded.
-    // Then, modify the buyerRateSeller function to store the score value:
 function buyerRateSeller(
     uint256 transactionId,
     uint8 scoreType,
@@ -191,7 +187,7 @@ function buyerRateSeller(
 
     scoreEngine.rateStakeholder(toBeRated, ScoreEngine.ScoreType(scoreType), scoreValue);
 
-    // MODIFIED: Store the score value for this transaction and score type
+    // Store the score value for this transaction and score type
     transactionScores[transactionId][scoreType][ratingFactory] = scoreValue;
 
     if (ratingFactory) {
@@ -204,7 +200,6 @@ function buyerRateSeller(
 
     if (!ratingFactory){
         // Factory cannot choose to accept/dispute a rating given by consumer
-        // Track this rated transaction (awaiting buyer acceptance/dispute)
         pendingRatedTransactions[txn.seller].push(transactionId);
     }
 }
@@ -226,12 +221,12 @@ function getTransactionScore(uint256 transactionId, uint8 scoreType, bool isFact
     return transactionScores[transactionId][scoreType][isFactory];
 }
 
-    // NEW: Returns all pending rated transaction IDs for a given seller address.
+    //  Returns all pending rated transaction IDs for a given seller address.
     function getPendingRatedTransactions(address _seller) external view returns (uint256[] memory) {
         return pendingRatedTransactions[_seller];
     }
 
-    // NEW: Updates the rating status for a given transaction.
+    //  Updates the rating status for a given transaction.
     // If 'accepted' is true, the seller accepts the rating; otherwise, the rating is disputed.
     // In both cases, the transaction is removed from the pending mapping.
 function updateRatingStatus(uint256 transactionId, uint8 scoreType, bool accepted) external {
@@ -251,7 +246,7 @@ function updateRatingStatus(uint256 transactionId, uint8 scoreType, bool accepte
         emit RatingDisputed(transactionId, msg.sender);
     }
 }
-    // INTERNAL: Remove a transactionId from pendingRatedTransactions for a given seller.
+    // Remove a transactionId from pendingRatedTransactions for a given seller.
     function _removePendingRatedTransaction(address seller, uint256 transactionId) internal {
         uint256[] storage pending = pendingRatedTransactions[seller];
         for (uint256 i = 0; i < pending.length; i++) {
@@ -332,36 +327,36 @@ function updateRatingStatus(uint256 transactionId, uint8 scoreType, bool accepte
         );
     }
 
-    // New view function: Check if the seller has been rated for a given score type.
+    //Check if the seller has been rated for a given score type.
     function isSellerRated(uint256 transactionId, uint8 scoreType) external view returns (bool) {
         require(_exists[transactionId], "Transaction does not exist");
         Transaction storage txn = _transactions[transactionId];
         return txn.ratedForSeller[scoreType];
     }
 
-    // New view function: Check if the factory has been rated for a given score type.
+    //Check if the factory has been rated for a given score type.
     function isFactoryRated(uint256 transactionId, uint8 scoreType) external view returns (bool) {
         require(_exists[transactionId], "Transaction does not exist");
         Transaction storage txn = _transactions[transactionId];
         return txn.ratedForFactory[scoreType];
     }
     
-    // NEW: Returns all unique buyers that have bought from a given seller
+    //  Returns all unique buyers that have bought from a given seller
     function getBuyersForSeller(address seller) external view returns (address[] memory) {
         return _sellerBuyers[seller];
     }
     
-    // NEW: Check if a specific address has bought from a seller
+    //  Check if a specific address has bought from a seller
     function hasBoughtFromSeller(address seller, address buyer) external view returns (bool) {
         return _buyerExistsForSeller[seller][buyer];
     }
     
-    // NEW: Get the number of buyers for a given seller
+    //  Get the number of buyers for a given seller
     function getSellerBuyerCount(address seller) external view returns (uint256) {
         return _sellerBuyers[seller].length;
     }
     
-    // NEW: Get the buyer address at a specific index for a given seller
+    //  Get the buyer address at a specific index for a given seller
     function getSellerBuyerAtIndex(address seller, uint256 index) external view returns (address) {
         require(index < _sellerBuyers[seller].length, "Index out of bounds");
         return _sellerBuyers[seller][index];

@@ -29,7 +29,7 @@ contract ScoreEngine is Ownable {
     // Precision constant for fixed-point arithmetic
     uint256 public constant PRECISION = 1e18;
     
-    uint256 public constant REWARD_AMOUNT = 10 * 1e18; // Fixed reward: 10 PTK
+    uint256 public constant REWARD_AMOUNT = 10 * 1e18; 
 
     IERC20 public token;
 
@@ -61,7 +61,7 @@ contract ScoreEngine is Ownable {
      */
     struct Score {
         ScoreType scoreType;
-        uint256 value;        // Using uint256 for fixed-point values
+        uint256 value;       
         address rater;
         uint256 timestamp;
     }
@@ -341,7 +341,7 @@ function hasRatedTypeByRater(
     ) external {
         // Set the global score manually
         globalScoresByType[_stakeholder][_scoreType] = _newScore;
-        // Reset the count for this score type (or set it to 1 to indicate manual update)
+        // Reset the count for this score type
         scoreCountsByType[_stakeholder][_scoreType] = 1;
 
         // Record a manual score entry in the score history

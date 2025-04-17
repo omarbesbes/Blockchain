@@ -117,7 +117,6 @@ export function useToken() {
     });
     return publicClient.waitForTransactionReceipt({ hash: txHash });
   }
-  //// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\hooks\useToken.js
 async function buy(amount) {
   if (!walletClient) throw new Error('No wallet connected');
   const txHash = await walletClient.writeContract({
@@ -126,7 +125,7 @@ async function buy(amount) {
     functionName: 'buy',
     args: [amount],
     account: walletClient.account,
-    value:(amount)/1000n, // Convert amount to wei (assuming amount is in ether)
+    value:(amount)/1000n, 
   });
   return publicClient.waitForTransactionReceipt({ hash: txHash });
 }

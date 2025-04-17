@@ -1,4 +1,3 @@
-// src/hooks/useProductManager.js
 import { useWalletClient, usePublicClient, useReadContract } from 'wagmi';
 import { productManagerAddress, productManagerABI } from '../contracts/ProductManager';
 

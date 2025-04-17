@@ -17,7 +17,7 @@ contract StakeholderRegistry is Ownable {
     // Structure for storing stakeholder details.
     struct Stakeholder {
         Role role;
-        string metadataURI; // Metadata stored as an IPFS/Arweave URI.
+        string metadataURI; 
         bool exists;
     }
 
@@ -25,7 +25,7 @@ contract StakeholderRegistry is Ownable {
     mapping(address => Stakeholder) private stakeholders;
     // Mapping to keep count of total stakeholders for each role.
     mapping(Role => uint256) private totalRegistered;
-    // Array to store all registered stakeholder addresses (for getAllStakeholders).
+    // Array to store all registered stakeholder addresse
     address[] private registeredAddresses;
 
     // Events to emit important state changes.
@@ -81,7 +81,6 @@ contract StakeholderRegistry is Ownable {
      * @return The role associated with the stakeholder.
      */
     function getRole(address _stakeholder) external view returns (Role) {
-        // Optional: Check if the stakeholder exists.
         return stakeholders[_stakeholder].role;
     }
 
@@ -125,7 +124,6 @@ contract StakeholderRegistry is Ownable {
         // Delete the stakeholder data.
         delete stakeholders[_stakeholder];
 
-        // Note: For simplicity, the registeredAddresses array is not pruned.
         emit StakeholderRemoved(_stakeholder);
     }
 
@@ -144,7 +142,6 @@ contract StakeholderRegistry is Ownable {
         // Add the new address to the registered list.
         registeredAddresses.push(_to);
 
-        // No update to totalRegistered is needed because the role remains unchanged.
         emit StakeholderRoleTransferred(msg.sender, _to, stakeholderData.role);
     }
 

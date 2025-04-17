@@ -166,6 +166,6 @@ return {
   updateConfidenceAfterDispute,
   setManualScore,
   getApplicableScoreTypes,
-  getConfidenceScore, // Add the new function here
+  getConfidenceScore,
 };
 }

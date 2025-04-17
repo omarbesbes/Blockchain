@@ -5,7 +5,6 @@ import { createPublicClient, http } from 'viem';
 import { createConfig, WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, getDefaultConfig } from '@rainbow-me/rainbowkit';
 
-// Define your custom chain for Hardhat with chain ID 31137
 const localHardhatChain = {
   id: 31337,
   name: 'Local Hardhat',
@@ -19,6 +18,7 @@ const localHardhatChain = {
 
 const chains = [localHardhatChain];
 
+
 const publicClient = createPublicClient({
   chain: localHardhatChain,
   transport: http(localHardhatChain.rpcUrls.default.http[0]),
@@ -26,7 +26,7 @@ const publicClient = createPublicClient({
 
 const config = getDefaultConfig({
   appName: 'My Local DApp',
-  projectId: '1b3897e0f01173ffec0628c6168ec762', // Replace with your WalletConnect project ID if needed
+  projectId: '1b3897e0f01173ffec0628c6168ec762', 
   chains,
   publicClient,
   walletConnectOptions: {
@@ -34,7 +34,7 @@ const config = getDefaultConfig({
       name: 'My Local DApp',
       description: 'A local DApp for testing',
       url: 'http://localhost:5173/',
-      icons: ['https://example.com/icon.png'], // Replace with your actual icon URL
+      icons: ['https://example.com/icon.png'], $
     },
   },
 });

@@ -83,6 +83,7 @@ describe("StakeholderRegistry", function () {
     it("Should allow a registered stakeholder to transfer their role", async function () {
       await registry.connect(addr1).registerStakeholder(5, "ipfs://consumer");
       await registry.connect(addr1).transferStakeholderRole(addr2.address);
+      
       // addr2 should now be registered, addr1 should not.
       expect(await registry.isRegistered(addr2.address)).to.equal(true);
       expect(await registry.isRegistered(addr1.address)).to.equal(false);

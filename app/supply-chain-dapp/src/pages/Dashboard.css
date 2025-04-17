@@ -270,12 +270,10 @@ body, html {
   background-color: #c53030;
 }
 
-/* Add some spacing between items */
 .rating-item {
   margin-bottom: 24px;
 }
 
-/* Enhanced styling for rating details section */
 .rating-details-section {
   margin: 16px 0;
 }

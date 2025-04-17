@@ -1,4 +1,3 @@
-// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\ScoringTab.jsx
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useGetProductsByOwner } from '../hooks/useProductManager';
@@ -16,15 +15,13 @@ const roleMapping = {
   5: 'Consumer',
 };
 
-// Modified allowedVoting to support Consumer rating both Retailer and Factory
 const allowedVoting = {
   2: 1, // Factory can rate Supplier
   4: 3, // Retailer can rate Distributor
   5: [4, 2] // Consumer can rate both Retailer and Factory
 };
 
-// Enhanced helper function to get product manufacturer (factory)
-// Enhanced helper function to get product manufacturer (factory)
+
 function getRoleBasedScoreTypes(role) {
   switch (role) {
     case 1: // Supplier
@@ -56,7 +53,7 @@ const scoreTypeMapping = {
 };
 
 
-// Constant reward amount (as defined in your contract: 10 * 1e18)
+// Constant reward amount 
 const REWARD_AMOUNT = '10000000000000000000';
 
 export default function ScoringTab() {
@@ -91,7 +88,7 @@ export default function ScoringTab() {
           break;
         }
         
-        // Get the previous transaction ID using the dedicated function
+        // Get the previous transaction ID
         txId = await getPreviousTransactionId(txId);
       }
       
@@ -129,7 +126,7 @@ export default function ScoringTab() {
   const [message, setMessage] = useState('');
   const [pendingBuyRequests, setPendingBuyRequests] = useState([]);
   const [votableProducts, setVotableProducts] = useState([]);
-  const [selectedRatingTarget, setSelectedRatingTarget] = useState(null); // 'retailer' or 'factory'
+  const [selectedRatingTarget, setSelectedRatingTarget] = useState(null); 
 
   // Flags to ensure data is loaded only once per refresh
   const [votableFetched, setVotableFetched] = useState(false);
@@ -349,7 +346,6 @@ export default function ScoringTab() {
     }
   };
   
-  // New function to choose rating target (for consumers)
   const handleSelectRatingTarget = (product, targetType) => {
     setSelectedRatingTarget(targetType);
     
@@ -470,7 +466,6 @@ export default function ScoringTab() {
         
         {selectedProduct === product.productId && (
           <div className="score-form">
-            {/* For consumers, show options to rate retailer or factory */}
             {myRole === 5 && !selectedRatingTarget && (
               <div className="rating-target-selection">
                 <h3>Choose who to rate:</h3>
@@ -493,7 +488,6 @@ export default function ScoringTab() {
               </div>
             )}
             
-            {/* Show rating form once seller is selected */}
             {sellerAddress && (
               <>
                 <h3>Rate {selectedRatingTarget === 'factory' ? 'Factory' : 'Seller'}: {sellerAddress}</h3>
@@ -532,8 +526,6 @@ export default function ScoringTab() {
           Product #{String(pendingTx.productId)} - Transaction ID: {String(pendingTx.transactionId)}
         </p>
         <p>Buyer: {pendingTx.buyer}</p>
-        {/* Remove or comment out the reward amount */}
-        {/* <p>Reward: {String(pendingTx.rewardAmount)}</p> */}
         <button onClick={() => handleConfirm(pendingTx)}>Confirm</button>
         <button onClick={() => handleCancel(pendingTx)}>Cancel</button>
       </li>

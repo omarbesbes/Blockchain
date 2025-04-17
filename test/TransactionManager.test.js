@@ -13,7 +13,6 @@ describe("TransactionManager", function () {
   // REWARD_AMOUNT as defined in the contract (10 tokens with 18 decimals)
   const REWARD_AMOUNT = ethers.parseUnits("10", "ether");
 
-  // Roles: None = 0, Supplier = 1, Factory = 2, Distributor = 3, Retailer = 4, Consumer = 5.
   const Role = { None: 0, Supplier: 1, Factory: 2, Distributor: 3, Retailer: 4, Consumer: 5 };
 
   async function getEvent(tx, eventTag, contract) {
@@ -48,19 +47,19 @@ describe("TransactionManager", function () {
       other
     ] = await ethers.getSigners();
 
-    // 1. Deploy and set up StakeholderRegistry
+    // Deploy and set up StakeholderRegistry
     StakeholderRegistry = await ethers.getContractFactory("StakeholderRegistry");
     registry = await StakeholderRegistry.deploy();
     await registry.waitForDeployment();
 
-    // 2. Register stakeholders with their respective roles
+    // Register stakeholders with their respective roles
     await registry.connect(supplier).registerStakeholder(Role.Supplier, "ipfs://supplier");
     await registry.connect(factory).registerStakeholder(Role.Factory, "ipfs://factory");
     await registry.connect(distributor).registerStakeholder(Role.Distributor, "ipfs://distributor");
     await registry.connect(retailer).registerStakeholder(Role.Retailer, "ipfs://retailer");
     await registry.connect(consumer).registerStakeholder(Role.Consumer, "ipfs://consumer");
 
-    // 3. Deploy ProductManager
+    // Deploy ProductManager
     ProductManager = await ethers.getContractFactory("ProductManager");
     productManager = await ProductManager.deploy();
     await productManager.waitForDeployment();
@@ -79,12 +78,12 @@ describe("TransactionManager", function () {
     );
     await scoreEngine.waitForDeployment();
 
-    // 4. Deploy DisputeManager (dummy for ScoreEngine)
+    // Deploy DisputeManager (dummy for ScoreEngine)
     DisputeManager = await ethers.getContractFactory("DisputeManager");
     disputeManager = await DisputeManager.deploy(await registry.getAddress(),await scoreEngine.getAddress());
     await disputeManager.waitForDeployment();
 
-    // 7. Distribute tokens
+    // Distribute tokens
     await token.transfer(await factory.getAddress(), ethers.parseUnits("1000", "ether"));
     await token.transfer(await distributor.getAddress(), ethers.parseUnits("1000", "ether"));
     await token.transfer(await retailer.getAddress(), ethers.parseUnits("1000", "ether"));
@@ -94,7 +93,7 @@ describe("TransactionManager", function () {
     // Supplier also gets some tokens if needed
     await token.transfer(await supplier.getAddress(), ethers.parseUnits("1000", "ether"));
 
-    // 8. Deploy TransactionManager
+    // Deploy TransactionManager
     TransactionManager = await ethers.getContractFactory("TransactionManager");
     transactionManager = await TransactionManager.deploy(
       await registry.getAddress(),
@@ -106,12 +105,7 @@ describe("TransactionManager", function () {
     await transactionManager.waitForDeployment();
   });
 
-  //
-  // ============================================================================
-  // 1) recordBuyOperation with productId=0: e.g., "Supplier -> Factory"
-  //    or "Distributor -> Retailer" or "Consumer -> Retailer" for items with no NFT
-  // ============================================================================
-  //
+
   describe("recordBuyOperation (no NFT minted, productId=0)", function () {
     it("records a valid Supplier -> Factory purchase (factory is buyer, supplier is seller)", async function () {
       // Buyer = factory(2), Seller = supplier(1). (2 - 1 = 1) => valid.
@@ -125,7 +119,6 @@ describe("TransactionManager", function () {
 
       const txn = await transactionManager.getTransaction(1);
       console.log(txn);
-      //checking txn.status
       expect(txn[5]).to.equal(0); // Pending
     });
 
@@ -140,8 +133,7 @@ describe("TransactionManager", function () {
       expect(event.args.productId).to.equal(0);
 
       const txn = await transactionManager.getTransaction(1);
-      //checking txn.status
-      expect(txn[5]).to.equal(0); // Pending
+      expect(txn[5]).to.equal(0); 
     });
 
     it("records a valid Consumer -> Retailer purchase (consumer is buyer, retailer is seller)", async function () {
@@ -155,8 +147,7 @@ describe("TransactionManager", function () {
       expect(event.args.productId).to.equal(0);
 
       const txn = await transactionManager.getTransaction(1);
-      //checking txn.status
-      expect(txn[5]).to.equal(0); // Pending
+      expect(txn[5]).to.equal(0);
     });
 
     it("reverts for an invalid buyer-seller combination (e.g. Factory->Distributor) for productId=0", async function () {
@@ -170,12 +161,7 @@ describe("TransactionManager", function () {
     });
   });
 
-  //
-  // ============================================================================
-  // 2) recordBuyOperation WITH an actual minted NFT: e.g. "Factory->Distributor"
-  //    The Factory is the product owner, the Distributor is the buyer.
-  // ============================================================================
-  //
+ 
   describe("recordBuyOperation (factory-owned NFT scenario)", function () {
     let mintedProductId;
 
@@ -217,20 +203,16 @@ describe("TransactionManager", function () {
     });
   });
 
-  //
-  // ============================================================================
-  // 3) confirmSellOperation
-  // ============================================================================
-  //
+
   describe("confirmSellOperation", function () {
     it("allows seller (distributor) to confirm a sale to retailer, transferring deposit from distributor->retailer", async function () {
-      // 1) Retailer->Distributor purchase with productId=0
+      // Retailer->Distributor purchase with productId=0
       const txBuy = await transactionManager
         .connect(retailer)
         .recordBuyOperation(await distributor.getAddress(), 0);
       await txBuy.wait();
 
-      // 2) Distributor approves deposit and confirms
+      // Distributor approves deposit and confirms
       await token.connect(distributor).approve(transactionManager.getAddress(), REWARD_AMOUNT);
       const initialRetailerBalance = await token.balanceOf(await retailer.getAddress());
 
@@ -241,18 +223,17 @@ describe("TransactionManager", function () {
       expect(finalRetailerBalance-(initialRetailerBalance)).to.equal(REWARD_AMOUNT);
 
       const txn = await transactionManager.getTransaction(1);
-      //checking txn.status
-      expect(txn[5]).to.equal(1); // Validated
+      expect(txn[5]).to.equal(1); 
     });
 
     it("allows seller (retailer) to confirm a sale to consumer, depositing tokens to ScoreEngine", async function () {
-      // 1) Consumer->Retailer purchase with productId=0
+      // Consumer->Retailer purchase with productId=0
       const txBuy = await transactionManager
         .connect(consumer)
         .recordBuyOperation(await retailer.getAddress(), 0);
       await txBuy.wait();
 
-      // 2) Retailer approves deposit and confirms
+      // Retailer approves deposit and confirms
       await token.connect(retailer).approve(transactionManager.getAddress(), REWARD_AMOUNT);
       const initialScoreEngineBalance = await token.balanceOf(await scoreEngine.getAddress());
 
@@ -262,8 +243,7 @@ describe("TransactionManager", function () {
       expect(finalScoreEngineBalance-(initialScoreEngineBalance)).to.equal(REWARD_AMOUNT);
 
       const txn = await transactionManager.getTransaction(1);
-      //checking txn.status
-      expect(txn[5]).to.equal(1); // Validated
+      expect(txn[5]).to.equal(1); 
     });
 
     it("allows seller (factory) to confirm a sale to distributor (minted product), deposit from factory->distributor", async function () {
@@ -313,11 +293,6 @@ describe("TransactionManager", function () {
     });
   });
 
-  //
-  // ============================================================================
-  // 4) buyerRateSeller
-  // ============================================================================
-  //
   describe("buyerRateSeller", function () {
     it("allows Factory (buyer) to rate Supplier (seller) for a raw-material (productId=0) purchase", async function () {
       // Buyer=factory(2), Seller=supplier(1)
@@ -440,8 +415,7 @@ describe("TransactionManager", function () {
     });
 
     it("reverts if the roles do not match an allowed buyer-seller rating scenario", async function () {
-      // e.g., Supplier trying to rate Factory in a transaction where
-      // buyer=Factory, seller=Supplier
+      // e.g., Supplier trying to rate Factory in a transaction where buyer=Factory, seller=Supplier
       const txBuy = await transactionManager
         .connect(factory)
         .recordBuyOperation(await supplier.getAddress(), 0);
@@ -455,21 +429,15 @@ describe("TransactionManager", function () {
     });
   });
 
-  //
-  // ============================================================================
-  // 5) End-to-End flow: Factory->Distributor->Retailer->Consumer with an actual NFT
-  //    Then Consumer rates both Retailer (normal) and Factory (ratingFactory=true)
-  // ============================================================================
-  //
   it("allows a consumer to ultimately rate the factory after the product flows (factory->distributor->retailer->consumer)", async function () {
-    // Step 1: Factory mints a product
+    // Factory mints a product
     const txMint = await productManager
       .connect(factory)
       .mintProduct("ipfs://factory-product");
     const eventMint = await getEvent(txMint, "ProductMinted", productManager);
     const productId = eventMint.args.productId;
 
-    // Step 2: Distributor buys from Factory
+    // Distributor buys from Factory
     const txBuy1 = await transactionManager
       .connect(distributor)
       .recordBuyOperation(await factory.getAddress(), productId);
@@ -490,7 +458,7 @@ describe("TransactionManager", function () {
 
     // Product now with Distributor
 
-    // Step 3: Retailer buys from Distributor
+    // Retailer buys from Distributor
     const txBuy2 = await transactionManager
       .connect(retailer)
       .recordBuyOperation(await distributor.getAddress(), productId);
@@ -512,7 +480,7 @@ describe("TransactionManager", function () {
 
     // Product now with Retailer
 
-    // Step 4: Consumer buys from Retailer
+    // Consumer buys from Retailer
     const txBuy3 = await transactionManager
       .connect(consumer)
       .recordBuyOperation(await retailer.getAddress(), productId);
@@ -534,7 +502,7 @@ describe("TransactionManager", function () {
 
     // Product now with Consumer
 
-    // Step 5a: Consumer rates the Retailer (normal rating)
+    // Consumer rates the Retailer (normal rating)
     const txRateRetailer = await transactionManager
       .connect(consumer)
       .buyerRateSeller(3, /*scoreType=*/10, /*scoreValue=*/8, /*productId=*/0, /*ratingFactory=*/false);
@@ -544,8 +512,7 @@ describe("TransactionManager", function () {
     console.log("Consumer address:", await consumer.getAddress());
     console.log("factory address:", await factory.getAddress());
 
-    // Step 5b: Consumer also rates the Factory (ratingFactory=true)
-    // Must pass the minted productId so the contract can identify the original creator (factory).
+    // Step 5b: Consumer also rates the Factory (ratingFactory=true) Must pass the minted productId so the contract can identify the original creator (factory).
     const txRateFactory = await transactionManager
       .connect(consumer)
       .buyerRateSeller(3, /*scoreType=*/5, /*scoreValue=*/9, productId, /*ratingFactory=*/true);

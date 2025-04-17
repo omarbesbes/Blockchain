@@ -1,5 +1,4 @@
-//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\hooks\useDisputeManager.js
-// src/hooks/useDisputeManager.js
+
 import { getContract } from "viem";
 import { useWalletClient, usePublicClient } from "wagmi";
 import {

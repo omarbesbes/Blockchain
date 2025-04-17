@@ -1,4 +1,3 @@
-// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\ChallengesTab.jsx
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useTransactionManager } from '../hooks/useTransactionManager';
@@ -30,7 +29,7 @@ const DisputeOutcome = {
 };
 
 export default function ChallengesTab() {
-  const DEPOSIT_AMOUNT = 1; // 1 ETH deposit
+  const DEPOSIT_AMOUNT = 1; 
 
   const { address } = useAccount();
   const {
@@ -92,7 +91,6 @@ export default function ChallengesTab() {
     return () => clearInterval(intervalId);
   }, [address]);
 
-  // --- Fetching Functions ---
 
   // Fetch disputes initiated by the current user (challenger)
   async function fetchMyDisputes() {
@@ -108,7 +106,7 @@ export default function ChallengesTab() {
         try {
           const disputeDetails = await getDisputeDetails(disputeId);
           const txId = disputeDetails[1]; // ratingId stored here
-          const scoreType = disputeDetails[13]; // scoreType is at index 13 in the updated contract
+          const scoreType = disputeDetails[13]; 
           let scoreValue = null;
           try {
             scoreValue = await getTransactionScore(txId, scoreType, false);
@@ -263,8 +261,7 @@ export default function ChallengesTab() {
         try {
           const disputeDetails = await getDisputeDetails(disputeId);
           const txId = disputeDetails[1];
-          const scoreType = disputeDetails[13]; // scoreType is at index 13
-          // Skip disputes where you are already a participant
+          const scoreType = disputeDetails[13]; 
           const challenger = disputeDetails[2];
           const respondent = disputeDetails[3];
           const userIsParticipant = (
@@ -316,7 +313,6 @@ export default function ChallengesTab() {
     setDisputesLoading(false);
   }
 
-  // --- Action Handlers ---
 
   async function handleAcknowledge(ratingId, scoreType) {
     setError('');
@@ -355,7 +351,7 @@ export default function ChallengesTab() {
       
       const buyers = await getBuyersForSeller(address);
       console.log(`All previous buyers for ${scoreTypeNames[scoreType]} rating:`, buyers);
-      // Pass scoreType to initiateDispute (assuming contract function now expects txId, scoreType, respondent, deposit)
+      // Pass scoreType to initiateDispute 
       await initiateDispute(txId, scoreType, respondent, depositAmount);
       for (const buyer of buyers) {
         if (buyer !== respondent) {
@@ -368,7 +364,7 @@ export default function ChallengesTab() {
         }
       }
       setIndividualRatings(prev => prev.filter(rating => rating.ratingId !== ratingId));
-      fetchMyDisputes(); // Refresh your initiated disputes
+      fetchMyDisputes();
     } catch (err) {
       console.error(err);
       setError('Error disputing rating: ' + (err.message || err.toString()));
@@ -422,7 +418,6 @@ export default function ChallengesTab() {
     }
   }
 
-  // --- Helper Functions ---
 
   const formatDate = (timestamp) => {
     const date = new Date(Number(timestamp) * 1000);
@@ -485,7 +480,6 @@ export default function ChallengesTab() {
     }
   };
 
-  // --- Render ---
   return (
     <div className="challenges-container">
       {/* Disputes Against My Ratings (where you're respondent) */}

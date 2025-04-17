@@ -1,4 +1,3 @@
-//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\hooks\useTransactionManager.js
 import { useWalletClient, usePublicClient } from "wagmi";
 import {
   TransactionManagerAddress,
@@ -11,7 +10,7 @@ export function useTransactionManager() {
   // For read-only (view/pure calls)
   const publicClient = usePublicClient();
 
-  // 1. Buyer initiates a transaction (recordBuyOperation)
+  // Buyer initiates a transaction (recordBuyOperation)
   async function recordBuyOperation(seller, productId) {
     console.log("walletClient", walletClient);
     if (!walletClient) throw new Error("No wallet connected");
@@ -27,7 +26,7 @@ export function useTransactionManager() {
     return receipt;
   }
 
-  // 2. Seller confirms the transaction (confirmSellOperation)
+  // Seller confirms the transaction (confirmSellOperation)
   async function confirmSellOperation(transactionId) {
     if (!walletClient) throw new Error("No wallet connected");
 
@@ -41,7 +40,7 @@ export function useTransactionManager() {
     return receipt;
   }
 
-  // 3. Buyer rates the seller (buyerRateSeller)
+  // Buyer rates the seller (buyerRateSeller)
   async function buyerRateSeller(
     transactionId,
     scoreType,
@@ -62,7 +61,7 @@ export function useTransactionManager() {
     return receipt;
   }
 
-  // 4. Get a pending transaction by product ID (read-only)
+  // Get a pending transaction by product ID (read-only)
   async function getPendingTransactionByProduct(productId) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -72,7 +71,7 @@ export function useTransactionManager() {
     });
   }
 
-  // 5. Get all pending transactions for a product (read-only)
+  // Get all pending transactions for a product (read-only)
   async function getAllPendingTransactionsByProduct(productId) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -82,7 +81,7 @@ export function useTransactionManager() {
     });
   }
 
-  // 6. Check if a pending transaction exists for a product (read-only)
+  // Check if a pending transaction exists for a product (read-only)
   async function hasPendingTransaction(productId) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -92,7 +91,7 @@ export function useTransactionManager() {
     });
   }
 
-  // 7. Get a transaction's details using getTransaction (read-only)
+  // Get a transaction's details using getTransaction (read-only)
   async function getTransaction(txId) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -102,7 +101,7 @@ export function useTransactionManager() {
     });
   }
 
-  // 8. Get the last transaction ID for a given product (read-only)
+  // Get the last transaction ID for a given product (read-only)
   async function getLastTransactionId(productId) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -112,7 +111,7 @@ export function useTransactionManager() {
     });
   }
 
-  // 9. Check if the seller has been rated for a given score type (read-only)
+  // Check if the seller has been rated for a given score type (read-only)
   async function isSellerRated(transactionId, scoreType) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -122,7 +121,7 @@ export function useTransactionManager() {
     });
   }
 
-  // 10. Check if the factory has been rated for a given score type (read-only)
+  // Check if the factory has been rated for a given score type (read-only)
   async function isFactoryRated(transactionId, scoreType) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -132,7 +131,7 @@ export function useTransactionManager() {
     });
   }
 
-  // NEW 11. Get all pending rated transactions for a given seller (read-only)
+  // Get all pending rated transactions for a given seller (read-only)
   async function getPendingRatedTransactions(seller) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -166,7 +165,7 @@ export function useTransactionManager() {
     });
   }
 
-  // NEW 13. Get all buyers for a given seller (read-only)
+  // Get all buyers for a given seller (read-only)
   async function getBuyersForSeller(seller) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -189,7 +188,7 @@ async function getPreviousTransactionId(transactionId) {
   });
 }
 
-  // NEW 14. Check if a buyer has purchased from a seller (read-only)
+  // Check if a buyer has purchased from a seller (read-only)
   async function hasBoughtFromSeller(seller, buyer) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -199,7 +198,7 @@ async function getPreviousTransactionId(transactionId) {
     });
   }
 
-  // NEW 15. Get the number of buyers for a seller (read-only)
+  // Get the number of buyers for a seller (read-only)
   async function getSellerBuyerCount(seller) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -209,7 +208,7 @@ async function getPreviousTransactionId(transactionId) {
     });
   }
 
-  // NEW 16. Get a buyer at a specific index for a seller (read-only)
+  // Get a buyer at a specific index for a seller (read-only)
   async function getSellerBuyerAtIndex(seller, index) {
     return await publicClient.readContract({
       address: TransactionManagerAddress,
@@ -243,7 +242,6 @@ async function getPreviousTransactionId(transactionId) {
     isFactoryRated,
     getPendingRatedTransactions,
     updateRatingStatus,
-    // NEW buyer-seller relationship functions
     getBuyersForSeller,
     hasBoughtFromSeller,
     getSellerBuyerCount,

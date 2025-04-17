@@ -118,8 +118,7 @@ describe("ScoreEngine", function () {
       expect(globalScore).to.equal(ethers.parseUnits("8", 18));
 
       // Second rating: Factory rates Supplier with value 6.
-      const tx2 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 6);
-      const event2 = await getScoreAssignedEvent(tx2);
+      const tx2 = await scoreEngine.connect(factory).rateStakeholder(supplierAddr, ScoreType.TRUST, 6);      const event2 = await getScoreAssignedEvent(tx2);
       expect(event2.args.value).to.equal(7980000000000000000n);
       globalScore = await scoreEngine.globalScoresByType(supplierAddr, ScoreType.TRUST);
       expect(globalScore).to.equal(7980000000000000000n);

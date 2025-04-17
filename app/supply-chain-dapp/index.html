@@ -4,16 +4,12 @@
   <head>
     <meta charset="UTF-8" />
 
-    <!--
-      WARNING: 'unsafe-inline' disables much of the protection CSP normally provides.
-      Only use this for local dev or testing, not production.
-    -->
+
     <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
 
     <title>Inline Scripts Allowed</title>
   </head>
   <body>
-    <!-- Example inline script that would otherwise trigger a CSP error -->
     
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>

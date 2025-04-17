@@ -3,7 +3,6 @@ const { ethers } = require("hardhat");
 
 describe("Network Simulation", function () {
   it("simulates a full network of interactions", async function () {
-    // Get signers: [deployer, supplier1, supplier2, supplier3, factory1, factory2, distributor1, distributor2, retailer1, retailer2, consumer1,...,consumer10]
     const [
       deployer,
       supplier1,
@@ -17,7 +16,6 @@ describe("Network Simulation", function () {
       retailer2,
       ...consumers
     ] = await ethers.getSigners();
-    // Alias the first 10 consumers.
     const [
       consumer1,
       consumer2,
@@ -43,7 +41,6 @@ describe("Network Simulation", function () {
             break;
           }
         } catch (error) {
-          // Skip logs that don't belong to this contract.
         }
       }
       if (!parsedEvent) {
@@ -128,9 +125,6 @@ describe("Network Simulation", function () {
 
     const REWARD_AMOUNT = ethers.parseUnits("10", "ether");
 
-    // ---------------------------
-    // 1. Factory -> Supplier Purchases (Buyer-Initiated)
-    // ---------------------------
     // Transaction 1: Factory1 buys from Supplier1 (no deposit required)
     let tx = await transactionManager.connect(factory1).recordBuyOperation(await supplier1.getAddress(),0);
     await tx.wait();
@@ -155,9 +149,6 @@ describe("Network Simulation", function () {
     tx = await transactionManager.connect(factory1).buyerRateSeller(3, 0, 7, 0,false);
     await tx.wait();
 
-    // ---------------------------
-    // 2. Distributor -> Factory Purchases (Factory Products)
-    // ---------------------------
     // Factory1 mints a product.
     tx = await productManager.connect(factory1).mintProduct("ipfs://product-factory1-1");
     let productId1 = (await getEvent(tx, "ProductMinted", productManager)).args.productId;
@@ -182,9 +173,6 @@ describe("Network Simulation", function () {
     tx = await transactionManager.connect(factory2).confirmSellOperation(5);
     await tx.wait();
 
-    // ---------------------------
-    // 3. Retailer -> Distributor Purchases (with deposit from seller)
-    // ---------------------------
     // Retailer1 buys productId1 from Distributor1.
     tx = await transactionManager.connect(retailer1).recordBuyOperation(await distributor1.getAddress(), productId1);
     await tx.wait();
@@ -205,9 +193,7 @@ describe("Network Simulation", function () {
     tx = await transactionManager.connect(retailer2).buyerRateSeller(7, 6, 8, 0,false);
     await tx.wait();
 
-    // ---------------------------
-    // 4. Consumer -> Retailer Purchases (with deposit from seller)
-    // ---------------------------
+
     // Consumer1 buys from Retailer1.
     tx = await transactionManager.connect(consumer1).recordBuyOperation(await retailer1.getAddress(), productId1);
     await tx.wait();
@@ -228,8 +214,6 @@ describe("Network Simulation", function () {
     tx = await transactionManager.connect(consumer2).buyerRateSeller(9, 10, 8, 0,false);
     await tx.wait();
 
-    // 5. Consumer -> Factory Rating (Chain: Distributor -> Factory, then Retailer, then Consumer)
-    // ---------------------------
     // Factory1 mints a new product.
     tx = await productManager.connect(factory1).mintProduct("ipfs://product-factory1-special");
     let specialProductId = (await getEvent(tx, "ProductMinted", productManager)).args.productId;

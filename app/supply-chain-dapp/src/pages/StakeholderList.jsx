@@ -1,4 +1,3 @@
-// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\StakeholderList.jsx
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useStakeholderRegistry } from '../hooks/useStakeholderRegistry';
@@ -10,7 +9,7 @@ import './StakeholderList.css';
 export default function StakeholderList() {
   const { address, isConnected } = useAccount();
   const { getAllStakeholders, getStakeholderType } = useStakeholderRegistry();
-  const { getGlobalScore, getScores, getConfidenceScore } = useScoreEngine(); // Include getConfidenceScore
+  const { getGlobalScore, getScores, getConfidenceScore } = useScoreEngine(); 
   const { recordBuyOperation, hasPendingTransaction } = useTransactionManager();
   
   const [myRole, setMyRole] = useState(null);
@@ -24,7 +23,6 @@ export default function StakeholderList() {
   const [pendingProducts, setPendingProducts] = useState({});
   const [isCheckingPending, setIsCheckingPending] = useState(false);
 
-  // Updated scoreTypeMapping includes a key for 12
   const scoreTypeMapping = {
     0: 'Trust',
     1: 'Delivery speed',
@@ -51,7 +49,7 @@ export default function StakeholderList() {
     5: 'Consumer',
   };
 
-  // ====== 1) Fetch my role (only if not already fetched) ======
+  // Fetch my role (only if not already fetched)
   useEffect(() => {
     async function fetchMyRole() {
       if (!address) return;
@@ -67,7 +65,7 @@ export default function StakeholderList() {
     }
   }, [address, getStakeholderType, myRole]);
 
-  // ====== 2) Load Stakeholders (only once, if not already loaded) ======
+  // Load Stakeholders (only once, if not already loaded)
   useEffect(() => {
     async function loadAndFilterStakeholders() {
       if (!address || myRole === null) return;
@@ -139,7 +137,7 @@ for (const sAddr of allAddrs) {
       const confidenceScoreRaw = await getConfidenceScore(sAddr);
       const confidenceScore = Number(confidenceScoreRaw);
 
-      // Convert values (assumes scores are scaled by 1e18)
+      // Convert values 
       const score1 = Number(score1Raw) / 1e18;
       const score2 = Number(score2Raw) / 1e18;
       const score3 = Number(score3Raw) / 1e18;
@@ -154,7 +152,7 @@ for (const sAddr of allAddrs) {
         score2Type: scoreTypes[1],
         score3Type: scoreTypes[2],
         ratingCount,
-        confidenceScore: confidenceScore.toFixed(0) // Add formatted confidence score
+        confidenceScore: confidenceScore.toFixed(0) 
       });
     }
   } catch (err) {
@@ -165,13 +163,12 @@ for (const sAddr of allAddrs) {
 setVisibleStakeholders(finalList);
     }
 
-    // Only load if we haven't fetched stakeholders yet.
     if (visibleStakeholders.length === 0) {
       loadAndFilterStakeholders();
     }
   }, [address, myRole, getAllStakeholders, getStakeholderType, getGlobalScore, getScores, visibleStakeholders]);
 
-  // ====== 3) Check for pending transactions when products load ======
+  // Check for pending transactions when products load
   useEffect(() => {
     async function checkPendingTransactions() {
       if (!selectedStakeholderProducts || selectedStakeholderProducts.length === 0) return;
@@ -195,14 +192,14 @@ setVisibleStakeholders(finalList);
     checkPendingTransactions();
   }, [selectedStakeholderProducts]); 
 
-  // ====== 4) On stakeholder card click ======
+  //  On stakeholder card click
   function handleSelectStakeholder(stakeholderAddress) {
     setSelectedStakeholder(stakeholderAddress);
     setSelectedAddress(stakeholderAddress);
     setPendingProducts({});
   }
   
-  // ====== 5) Handle buy product ======
+  // Handle buy product
   async function handleBuyProduct(productId) {
     try {
       if (!window.confirm(`Are you sure you want to purchase Product #${productId}?`)) {
@@ -212,7 +209,6 @@ setVisibleStakeholders(finalList);
       console.log("Starting purchase for product:", productId);
       console.log("Selected stakeholder:", selectedStakeholder);
       console.log("Wallet connected:", isConnected);
-      // For demonstration, using fixed parameters
       await recordBuyOperation(selectedStakeholder, productId);
       
       console.log("Purchase recorded successfully");
@@ -235,9 +231,7 @@ setVisibleStakeholders(finalList);
     }
   }
 
-  // =======================
-  // RENDER
-  // =======================
+
   return (
     <div className="stakeholder-list-container">
       <header>
@@ -267,7 +261,7 @@ setVisibleStakeholders(finalList);
       <p>{scoreTypeMapping[st.score1Type]}: <strong>{st.score1}</strong></p>
       <p>{scoreTypeMapping[st.score2Type]}: <strong>{st.score2}</strong></p>
       <p>{scoreTypeMapping[st.score3Type]}: <strong>{st.score3}</strong></p>
-      <p>Confidence Score: <strong>{st.confidenceScore || 'N/A'}</strong></p> {/* Added confidence score */}
+      <p>Confidence Score: <strong>{st.confidenceScore || 'N/A'}</strong></p> 
     </div>
     <div className="rating-count">
       <small>({st.ratingCount} total ratings)</small>

@@ -1,8 +1,6 @@
-// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\pages\Dashboard.jsx
 import React, { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useStakeholderRegistry } from '../hooks/useStakeholderRegistry';
-import { useTransactionManager } from '../hooks/useTransactionManager';
 import { useGetProductsByOwner, useProductManager } from '../hooks/useProductManager';
 import { useScoreEngine } from '../hooks/useScoreEngine';
 import { useToken } from '../hooks/useToken';
@@ -59,7 +57,7 @@ export default function Dashboard() {
   // Token hooks
   const { balanceOf, buy } = useToken();
 
-  // 1) Fetch user's stakeholder role (only once per address)
+  // Fetch user's stakeholder role (only once per address)
   useEffect(() => {
     async function fetchDetails() {
       if (!address) return;
@@ -85,7 +83,7 @@ export default function Dashboard() {
     }
   }, [address, getStakeholderType, role]);
 
-// 2) Fetch scores (only once per address) - but skip for Consumers
+// Fetch scores (only once per address) - but skip for Consumers
 useEffect(() => {
   async function fetchApplicableScores() {
     if (!address || role === 'Consumer') {
@@ -115,7 +113,7 @@ useEffect(() => {
     fetchApplicableScores();
   }
 }, [address, getApplicableScoreTypes, getGlobalScore, scoresFetched, scoreTypeMapping, role]);
-  // 3) Fetch product details when products update (only once)
+  // Fetch product details when products update (only once)
   useEffect(() => {
     async function fetchAllProductDetails() {
       if (!products || products.length === 0) {
@@ -141,7 +139,7 @@ useEffect(() => {
     }
   }, [products, productsLoading, productsError, getProductDetails, detailsFetched]);
 
-  // 4) Fetch token balance for all users (not just Factory)
+  // Fetch token balance for all users (not just Factory)
 useEffect(() => {
   async function fetchBalance() {
     if (address) {
@@ -208,9 +206,9 @@ useEffect(() => {
     }
     
     try {
-      // Convert to BigInt for the transaction (assuming 18 decimals)
+      // Convert to BigInt for the transaction 
       const amountBigInt = BigInt(buyAmount*1e18);
-      await buy(amountBigInt); // Adjust for decimals
+      await buy(amountBigInt); 
       const newBalance = await balanceOf(address);
       setTokenBalance(Number(newBalance)/1e18); 
       setMessage(`Successfully bought ${buyAmount} tokens.`);

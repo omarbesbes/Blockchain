@@ -1,4 +1,3 @@
-//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\app\supply-chain-dapp\src\layouts\RootLayout.jsx
 import React from 'react';
 import { Link, Outlet } from 'react-router-dom';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
@@ -21,7 +20,6 @@ export default function RootLayout() {
           <button
             className="connect-wallet-button"
 
-            // disabled={!metamaskConnector.ready || connectLoading}
             onClick={() => connect({ connector: metamaskConnector })}
             style={{ marginRight: '0.5rem' }}
           >
