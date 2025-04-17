@@ -2,7 +2,7 @@ import React from 'react';
 import '@rainbow-me/rainbowkit/styles.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createPublicClient, http } from 'viem';
-import { createConfig, WagmiProvider } from 'wagmi';
+import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, getDefaultConfig } from '@rainbow-me/rainbowkit';
 
 const localHardhatChain = {
@@ -10,9 +10,9 @@ const localHardhatChain = {
   name: 'Local Hardhat',
   network: 'localhost',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: ['http://10.249.225.112:8545'] } },
+  rpcUrls: { default: { http: ['http://127.0.0.1:8545/'] } },
   blockExplorers: {
-    default: { name: 'Hardhat Explorer', url: 'http://10.249.225.112:8545' },
+    default: { name: 'Hardhat Explorer', url: 'http://127.0.0.1:8545/' },
   },
 };
 
