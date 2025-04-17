@@ -16,7 +16,7 @@ contract Token is ERC20, Ownable(msg.sender) {
     }
 
     function buy(uint256 amount) external payable{
-        require(msg.value*1000 >= amount, "Incorrect Ether sent");
+        require(msg.value == (amount/1000), "Incorrect Ether sent");
         _mint(msg.sender, amount);
     }
 }

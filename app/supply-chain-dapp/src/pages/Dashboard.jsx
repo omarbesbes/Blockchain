@@ -84,62 +84,61 @@ export default function Dashboard() {
       fetchDetails();
     }
   }, [address, getStakeholderType, role]);
-
-// 2) Fetch scores (only once per address) - but skip for Consumers
-useEffect(() => {
-  async function fetchApplicableScores() {
-    if (!address || role === 'Consumer') {
-      setScores([]);
-      setScoresFetched(true);
-      return;
-    }
-    
-    try {
-      const applicableTypes = await getApplicableScoreTypes(address);
-      const scoresData = await Promise.all(
-        applicableTypes.map(async (scoreId) => {
-          const rawScore = await getGlobalScore(address, scoreId);
-          const formattedScore = Number(rawScore) / 1e18;
-          return { name: scoreTypeMapping[scoreId] || `Score ${scoreId}`, value: formattedScore };
-        })
-      );
-      console.log(scoresData);
-      setScores(scoresData);
-      setScoresFetched(true);
-    } catch (err) {
-      console.error('Error fetching scores:', err);
-    }
-  }
-  
-  if (!scoresFetched) {
-    fetchApplicableScores();
-  }
-}, [address, getApplicableScoreTypes, getGlobalScore, scoresFetched, scoreTypeMapping, role]);
-  // 3) Fetch product details when products update (only once)
   useEffect(() => {
-    async function fetchAllProductDetails() {
-      if (!products || products.length === 0) {
-        setProductDetailsList([]);
+    setScoresFetched(false);
+  }, [address, role]);
+
+  // 2) Fetch scores (only once per address) - but skip for Consumers
+  useEffect(() => {
+    async function fetchApplicableScores() {
+      if (!address || role === 'Consumer') {
+        setScores([]);
+        setScoresFetched(true);
         return;
       }
       try {
-        const detailsArray = await Promise.all(
-          products.map(async (productId) => {
-            const details = await getProductDetails(productId);
-            return { id: productId.toString(), metadataURI: details.metadataURI };
+        const applicableTypes = await getApplicableScoreTypes(address);
+        const scoresData = await Promise.all(
+          applicableTypes.map(async (scoreId) => {
+            const rawScore = await getGlobalScore(address, scoreId);
+            const formattedScore = Number(rawScore) / 1e18;
+            return { name: scoreTypeMapping[scoreId] || `Score ${scoreId}`, value: formattedScore };
           })
         );
-        setProductDetailsList(detailsArray);
-        setDetailsFetched(true);
+        setScores(scoresData);
+        setScoresFetched(true);
       } catch (err) {
-        console.error('Error fetching product details:', err);
-        setProductDetailsList([]);
+        console.error('Error fetching scores:', err);
       }
     }
-    if (!productsLoading && !productsError && !detailsFetched) {
-      fetchAllProductDetails();
+    if (!scoresFetched) {
+      fetchApplicableScores();
     }
-  }, [products, productsLoading, productsError, getProductDetails, detailsFetched]);
+  }, [address, getApplicableScoreTypes, getGlobalScore, scoresFetched, scoreTypeMapping, role]); // 3) Fetch product details when products update (only once)
+    useEffect(() => {
+      async function fetchAllProductDetails() {
+        if (!products || products.length === 0) {
+          setProductDetailsList([]);
+          return;
+        }
+        try {
+          const detailsArray = await Promise.all(
+            products.map(async (productId) => {
+              const details = await getProductDetails(productId);
+              return { id: productId.toString(), metadataURI: details.metadataURI };
+            })
+          );
+          setProductDetailsList(detailsArray);
+          setDetailsFetched(true);
+        } catch (err) {
+          console.error('Error fetching product details:', err);
+          setProductDetailsList([]);
+        }
+      }
+      if (!productsLoading && !productsError && !detailsFetched) {
+        fetchAllProductDetails();
+      }
+    }, [products, productsLoading, productsError, getProductDetails, detailsFetched]);
 
   // 4) Fetch token balance for all users (not just Factory)
 useEffect(() => {
