@@ -48,7 +48,6 @@
     max-width: 1200px;
     margin: 0 auto;
   }
-  /* src/components/ConnectWalletButton.css */
 .connect-wallet-container {
   display: flex;
   align-items: center;

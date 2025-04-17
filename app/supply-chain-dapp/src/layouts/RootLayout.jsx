@@ -10,7 +10,6 @@ export default function RootLayout() {
 
   // If not connected, show ONLY the MetaMask connector
   if (!isConnected) {
-    // Find the MetaMask connector in your Wagmi config
     const metamaskConnector = connectors.find((c) => c.id === 'metaMask');
 
     return (

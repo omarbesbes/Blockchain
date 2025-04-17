@@ -17,7 +17,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *      where the smoothing factor (alpha) is modified by the rater's confidence score.
  */
 contract ScoreEngine is Ownable {
-    // Reference to your StakeholderRegistry
+    // Reference to StakeholderRegistry
     StakeholderRegistry private registry;
 
     // Reference to the ProductManager

@@ -2,7 +2,6 @@
 const { ethers } = require("hardhat");
 
 async function main() {
-  // Replace this with your deployed ProductManager contract address
   const productManagerAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
 
   // Get the ProductManager contract factory and attach to the deployed instance
