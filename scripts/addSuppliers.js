@@ -1,4 +1,3 @@
-// scripts/addStakeholders.js
 const { ethers } = require("hardhat");
 
 async function main() {

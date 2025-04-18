@@ -1,4 +1,3 @@
-//// filepath: d:\OneDrive - CentraleSupelec\2A\Blockchain\PROJECT\Blockchain\scripts\deploy.js
 const hre = require("hardhat"); // CommonJS import
 const { ethers } = hre;         // ethers from Hardhat
 

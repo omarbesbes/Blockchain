@@ -10,9 +10,9 @@ const localHardhatChain = {
   name: 'Local Hardhat',
   network: 'localhost',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: ['http://127.0.0.1:8545/'] } },
+  rpcUrls: { default: { http: ['http://localhost:8545/'] } },
   blockExplorers: {
-    default: { name: 'Hardhat Explorer', url: 'http://127.0.0.1:8545/' },
+    default: { name: 'Hardhat Explorer', url: 'http://localhost:8545/' },
   },
 };
 
@@ -34,7 +34,7 @@ const config = getDefaultConfig({
       name: 'My Local DApp',
       description: 'A local DApp for testing',
       url: 'http://localhost:5173/',
-      icons: ['https://example.com/icon.png'], $
+      icons: ['https://example.com/icon.png'], 
     },
   },
 });
